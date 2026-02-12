@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.backends"
+
+[project]
+name = "oxyde-admin"
+version = "0.1.0"
+description = "Admin interface for Oxyde ORM"
+requires-python = ">=3.10"
+dependencies = [
+    "oxyde>=0.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
