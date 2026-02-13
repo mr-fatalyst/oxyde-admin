@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from oxyde.models import iter_tables
 
 from .config import ModelAdmin
+from .schema import build_schema
 
 if TYPE_CHECKING:
     from oxyde.models import Model
@@ -33,4 +34,4 @@ class AdminSite:
         return dict(self._registry)
 
 
-__all__ = ["AdminSite", "ModelAdmin"]
+__all__ = ["AdminSite", "ModelAdmin", "build_schema"]
