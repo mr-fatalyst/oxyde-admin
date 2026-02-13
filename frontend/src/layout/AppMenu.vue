@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { api } from '@/api.js';
 import AppMenuItem from './AppMenuItem.vue';
 
 const model = ref([
@@ -21,7 +22,7 @@ const model = ref([
 
 onMounted(async () => {
     try {
-        const res = await fetch('/api/models/');
+        const res = await api('/api/models/');
         const models = await res.json();
         model.value[1].items = models.map((m) => ({
             label: m.verbose_name,

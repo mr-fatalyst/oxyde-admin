@@ -1,8 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { BASE } from '@/api.js';
 import AppLayout from '@/layout/AppLayout.vue';
 
 const router = createRouter({
-    history: createWebHistory(),
+    history: createWebHistory(BASE),
     routes: [
         {
             path: '/',

@@ -35,6 +35,7 @@ export default defineConfig({
             },
         },
     },
+    base: './',
     build: {
         outDir: '../oxyde_admin/static',
         emptyOutDir: true,

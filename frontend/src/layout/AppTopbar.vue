@@ -12,7 +12,7 @@ const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
                 <i class="pi pi-bars"></i>
             </button>
             <router-link to="/" class="layout-topbar-logo">
-                <i class="pi pi-shield" style="font-size: 1.5rem; color: var(--primary-color)"></i>
+                <i class="pi pi-shield" style="font-size: 1.5rem"></i>
                 <span>Oxyde Admin</span>
             </router-link>
         </div>
