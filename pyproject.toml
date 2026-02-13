@@ -11,6 +11,9 @@ dependencies = [
     "oxyde>=0.3.0",
 ]
 
+[tool.setuptools.package-data]
+oxyde_admin = ["static/**/*"]
+
 [project.optional-dependencies]
 dev = [
     "pytest",

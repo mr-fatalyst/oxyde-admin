@@ -15,6 +15,7 @@ from oxyde_admin.api.routes import (
     create_record,
     update_record,
     delete_record,
+    get_options,
 )
 from oxyde_admin.schema import build_schema
 
@@ -67,13 +68,16 @@ class FastAPIAdmin(AbstractAdapter):
         @app.get("/api/models/")
         async def models_list() -> list[dict]:
             result = []
-            for model, _config in self._registry.items():
+            for model, config in self._registry.items():
                 model.ensure_field_metadata()
                 meta = model._db_meta
                 result.append({
                     "name": meta.table_name,
                     "verbose_name": model.__name__,
                     "field_count": len(meta.field_metadata),
+                    "list_display": config.list_display,
+                    "ordering": config.ordering,
+                    "display_field": config.display_field,
                 })
             return result
 
@@ -100,6 +104,13 @@ class FastAPIAdmin(AbstractAdapter):
                 "page": result.page,
                 "per_page": result.per_page,
             }
+
+        @app.get("/api/{model_name}/options/", response_model=None)
+        async def model_options(model_name: str):
+            model = self._require_model(model_name)
+            config = self._registry.get(model)
+            display = config.display_field if config else None
+            return await get_options(model, display)
 
         @app.get("/api/{model_name}/{pk}/", response_model=None)
         async def model_get(model_name: str, pk: str):

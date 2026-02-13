@@ -46,6 +46,6 @@ app = FastAPI(
 # --- Admin ---
 
 admin = FastAPIAdmin()
-admin.register(Author, list_display=["name", "email", "is_active"])
+admin.register(Author, list_display=["name", "email", "is_active"], display_field="name")
 admin.register(Post, list_display=["title", "author_id", "views"])
 app.mount("/admin", admin.app)

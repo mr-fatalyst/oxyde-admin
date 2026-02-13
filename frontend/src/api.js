@@ -10,7 +10,6 @@
 function detectBase() {
     const scripts = document.querySelectorAll('script[src]');
     for (const s of scripts) {
-        // s.src is the absolute resolved URL (DOM property, not attribute)
         const match = s.src.match(/^https?:\/\/[^/]+(\/.*\/)assets\//);
         if (match) return match[1];
     }
@@ -19,7 +18,8 @@ function detectBase() {
 
 export const BASE = detectBase();
 
-export function api(path) {
-    const base = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
-    return fetch(base + path);
+const API_PREFIX = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
+
+export function api(path, options) {
+    return fetch(API_PREFIX + path, options);
 }

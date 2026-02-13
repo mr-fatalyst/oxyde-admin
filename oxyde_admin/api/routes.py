@@ -74,8 +74,30 @@ async def delete_record(
     return await model.objects.filter(**{pk_field: pk}).delete()
 
 
+async def get_options(
+    model: type[OxydeModel],
+    display_field: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return [{value: pk, label: display}] for FK dropdowns."""
+    pk_field = _get_pk_field(model)
+    label_field = display_field or _guess_display_field(model)
+    items = await model.objects.all()
+    return [
+        {"value": getattr(item, pk_field), "label": getattr(item, label_field)}
+        for item in items
+    ]
+
+
 def _get_pk_field(model: type[OxydeModel]) -> str:
     for name, col in model._db_meta.field_metadata.items():
         if col.primary_key:
             return name
     raise ValueError(f"No primary key found for {model.__name__}")
+
+
+def _guess_display_field(model: type[OxydeModel]) -> str:
+    """Fallback: first string field, or PK."""
+    for name, col in model._db_meta.field_metadata.items():
+        if col.python_type is str:
+            return name
+    return _get_pk_field(model)
