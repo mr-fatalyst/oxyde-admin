@@ -1,17 +1,36 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router';
+import AppLayout from '@/layout/AppLayout.vue';
 
-import Dashboard from './views/Dashboard.vue'
-import ModelList from './views/ModelList.vue'
-import ModelDetail from './views/ModelDetail.vue'
+const router = createRouter({
+    history: createWebHistory(),
+    routes: [
+        {
+            path: '/',
+            component: AppLayout,
+            children: [
+                {
+                    path: '/',
+                    name: 'dashboard',
+                    component: () => import('@/views/Dashboard.vue')
+                },
+                {
+                    path: '/:model',
+                    name: 'model-list',
+                    component: () => import('@/views/ModelList.vue')
+                },
+                {
+                    path: '/:model/create',
+                    name: 'model-create',
+                    component: () => import('@/views/ModelDetail.vue')
+                },
+                {
+                    path: '/:model/:pk',
+                    name: 'model-detail',
+                    component: () => import('@/views/ModelDetail.vue')
+                }
+            ]
+        }
+    ]
+});
 
-const routes = [
-  { path: '/', component: Dashboard },
-  { path: '/:model', component: ModelList },
-  { path: '/:model/create', component: ModelDetail },
-  { path: '/:model/:pk', component: ModelDetail },
-]
-
-export default createRouter({
-  history: createWebHistory(),
-  routes,
-})
+export default router;
