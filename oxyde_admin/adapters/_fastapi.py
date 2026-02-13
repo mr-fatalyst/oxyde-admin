@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -44,6 +44,12 @@ class FastAPIAdmin(AbstractAdapter):
 
         return app
 
+    def _require_model(self, model_name: str):
+        model = self._resolve_model(model_name)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        return model
+
     def _register_exception_handlers(self, app: FastAPI) -> None:
         @app.exception_handler(NotFoundError)
         async def _not_found(request: Request, exc: NotFoundError) -> JSONResponse:
@@ -70,59 +76,55 @@ class FastAPIAdmin(AbstractAdapter):
                 })
             return result
 
-        @app.get("/api/{model_name}/schema/")
-        async def model_schema(model_name: str) -> JSONResponse | dict:
-            model = self._resolve_model(model_name)
-            if model is None:
-                return JSONResponse({"detail": "Model not found"}, status_code=404)
+        @app.get("/api/{model_name}/schema/", response_model=None)
+        async def model_schema(model_name: str):
+            model = self._require_model(model_name)
             return build_schema(model)
 
-        @app.get("/api/{model_name}/")
+        @app.get("/api/{model_name}/", response_model=None)
         async def model_list(
             model_name: str,
             page: int = 1,
             per_page: int = 25,
             ordering: str | None = None,
-        ) -> JSONResponse | dict:
-            model = self._resolve_model(model_name)
-            if model is None:
-                return JSONResponse({"detail": "Model not found"}, status_code=404)
+        ):
+            model = self._require_model(model_name)
             order_list = ordering.split(",") if ordering else None
-            return await list_records(
+            result = await list_records(
                 model, page=page, per_page=per_page, ordering=order_list,
             )
+            return {
+                "items": [item.model_dump() for item in result.items],
+                "total": result.total,
+                "page": result.page,
+                "per_page": result.per_page,
+            }
 
-        @app.get("/api/{model_name}/{pk}/")
-        async def model_get(model_name: str, pk: str) -> JSONResponse | dict:
-            model = self._resolve_model(model_name)
-            if model is None:
-                return JSONResponse({"detail": "Model not found"}, status_code=404)
-            return await get_record(model, self._cast_pk(model, pk))
+        @app.get("/api/{model_name}/{pk}/", response_model=None)
+        async def model_get(model_name: str, pk: str):
+            model = self._require_model(model_name)
+            record = await get_record(model, self._cast_pk(model, pk))
+            return record.model_dump()
 
-        @app.post("/api/{model_name}/", status_code=201)
-        async def model_create(model_name: str, request: Request) -> JSONResponse | dict:
-            model = self._resolve_model(model_name)
-            if model is None:
-                return JSONResponse({"detail": "Model not found"}, status_code=404)
+        @app.post("/api/{model_name}/", status_code=201, response_model=None)
+        async def model_create(model_name: str, request: Request):
+            model = self._require_model(model_name)
             data = await request.json()
-            return await create_record(model, data)
+            record = await create_record(model, data)
+            return record.model_dump()
 
-        @app.put("/api/{model_name}/{pk}/")
-        async def model_update(
-            model_name: str, pk: str, request: Request,
-        ) -> JSONResponse | dict:
-            model = self._resolve_model(model_name)
-            if model is None:
-                return JSONResponse({"detail": "Model not found"}, status_code=404)
+        @app.put("/api/{model_name}/{pk}/", response_model=None)
+        async def model_update(model_name: str, pk: str, request: Request):
+            model = self._require_model(model_name)
             data = await request.json()
-            return await update_record(model, self._cast_pk(model, pk), data)
+            record = await update_record(model, self._cast_pk(model, pk), data)
+            return record.model_dump()
 
-        @app.delete("/api/{model_name}/{pk}/")
-        async def model_delete(model_name: str, pk: str) -> JSONResponse | dict:
-            model = self._resolve_model(model_name)
-            if model is None:
-                return JSONResponse({"detail": "Model not found"}, status_code=404)
-            return await delete_record(model, self._cast_pk(model, pk))
+        @app.delete("/api/{model_name}/{pk}/", response_model=None)
+        async def model_delete(model_name: str, pk: str):
+            model = self._require_model(model_name)
+            count = await delete_record(model, self._cast_pk(model, pk))
+            return {"deleted": count}
 
     def _register_static(self, app: FastAPI) -> None:
         assets_dir = STATIC_DIR / "assets"
@@ -131,8 +133,8 @@ class FastAPIAdmin(AbstractAdapter):
 
         index_html = STATIC_DIR / "index.html"
 
-        @app.get("/{path:path}")
-        async def catch_all(path: str) -> HTMLResponse | JSONResponse:
+        @app.get("/{path:path}", response_model=None)
+        async def catch_all(path: str):
             if index_html.exists():
                 return HTMLResponse(index_html.read_text())
             return JSONResponse({"detail": "Frontend not built"}, status_code=404)
