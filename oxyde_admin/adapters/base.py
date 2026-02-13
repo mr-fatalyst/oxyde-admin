@@ -11,6 +11,20 @@ if TYPE_CHECKING:
 class AbstractAdapter(AdminSite):
     """Base class for framework-specific adapters."""
 
+    def __init__(
+        self,
+        *,
+        title: str = "Oxyde Admin",
+        preset: str = "Aura",
+        primary_color: str = "sky",
+        surface: str = "slate",
+    ) -> None:
+        super().__init__()
+        self.title = title
+        self.preset = preset
+        self.primary_color = primary_color
+        self.surface = surface
+
     def _resolve_model(self, name: str) -> type[OxydeModel] | None:
         """Find a registered model by its table name."""
         for model in self._registry:

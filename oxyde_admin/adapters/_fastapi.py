@@ -25,8 +25,8 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 class FastAPIAdmin(AbstractAdapter):
     """FastAPI adapter for Oxyde Admin."""
 
-    def __init__(self, prefix: str = "/admin") -> None:
-        super().__init__()
+    def __init__(self, prefix: str = "/admin", **kwargs) -> None:
+        super().__init__(**kwargs)
         self.prefix = prefix
         self._app: FastAPI | None = None
 
@@ -65,6 +65,15 @@ class FastAPIAdmin(AbstractAdapter):
             return JSONResponse({"detail": exc.errors()}, status_code=422)
 
     def _register_api_routes(self, app: FastAPI) -> None:
+        @app.get("/api/config/")
+        async def admin_config() -> dict:
+            return {
+                "title": self.title,
+                "preset": self.preset,
+                "primary_color": self.primary_color,
+                "surface": self.surface,
+            }
+
         @app.get("/api/models/")
         async def models_list() -> list[dict]:
             result = []

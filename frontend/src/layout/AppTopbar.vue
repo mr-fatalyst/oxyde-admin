@@ -1,8 +1,9 @@
 <script setup>
+import { inject } from 'vue';
 import { useLayout } from '@/layout/composables/layout';
-import AppConfigurator from './AppConfigurator.vue';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
+const adminTitle = inject('adminTitle', 'Oxyde Admin');
 </script>
 
 <template>
@@ -13,7 +14,7 @@ const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
             </button>
             <router-link to="/" class="layout-topbar-logo">
                 <i class="pi pi-shield" style="font-size: 1.5rem"></i>
-                <span>Oxyde Admin</span>
+                <span>{{ adminTitle }}</span>
             </router-link>
         </div>
 
@@ -22,16 +23,6 @@ const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
                 <button type="button" class="layout-topbar-action" @click="toggleDarkMode">
                     <i :class="['pi', { 'pi-moon': isDarkTheme, 'pi-sun': !isDarkTheme }]"></i>
                 </button>
-                <div class="relative">
-                    <button
-                        v-styleclass="{ selector: '@next', enterFromClass: 'hidden', enterActiveClass: 'p-anchored-overlay-enter-active', leaveToClass: 'hidden', leaveActiveClass: 'p-anchored-overlay-leave-active', hideOnOutsideClick: true }"
-                        type="button"
-                        class="layout-topbar-action layout-topbar-action-highlight"
-                    >
-                        <i class="pi pi-palette"></i>
-                    </button>
-                    <AppConfigurator />
-                </div>
             </div>
 
             <button
