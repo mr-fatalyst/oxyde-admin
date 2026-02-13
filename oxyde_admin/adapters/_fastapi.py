@@ -68,6 +68,7 @@ class FastAPIAdmin(AbstractAdapter):
         async def models_list() -> list[dict]:
             result = []
             for model, _config in self._registry.items():
+                model.ensure_field_metadata()
                 meta = model._db_meta
                 result.append({
                     "name": meta.table_name,
