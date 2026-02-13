@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 from oxyde.models import iter_tables
 
-from .config import ModelAdmin
-from .schema import build_schema
+from oxyde_admin.config import ModelAdmin
+from oxyde_admin.schema import build_schema
 
 if TYPE_CHECKING:
     from oxyde.models import Model
