@@ -2,11 +2,13 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
+import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
 
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const confirm = useConfirm();
 
 const modelName = ref(route.params.model);
 const pk = ref(route.params.pk);
@@ -15,10 +17,12 @@ const isCreate = computed(() => !pk.value);
 const schema = ref(null);
 const fields = ref([]);
 const formData = ref({});
+const originalData = ref(null);
 const errors = ref({});
 const fkOptions = ref({});  // { fieldName: [{value, label}] }
 const loading = ref(false);
 const saving = ref(false);
+const deleting = ref(false);
 
 // --- Schema parsing ---
 
@@ -38,8 +42,6 @@ function hasRef(prop) {
 }
 
 function extractFkMap(schemaData) {
-    // Build a map: column_name -> {model, field} from $ref properties
-    // e.g. author has x-db-column: "author_id" and x-db-foreign-key: {model: "authors", field: "id"}
     const map = {};
     const props = schemaData.properties || {};
     for (const [, prop] of Object.entries(props)) {
@@ -47,7 +49,7 @@ function extractFkMap(schemaData) {
         const fk = prop['x-db-foreign-key'];
         const col = prop['x-db-column'];
         if (fk && col) {
-            map[col] = fk; // { model: "authors", field: "id" }
+            map[col] = fk;
         }
     }
     return map;
@@ -84,6 +86,12 @@ function buildFields(schemaData) {
 
 const visibleFields = computed(() => {
     return fields.value.filter((f) => !(f.isPk && isCreate.value));
+});
+
+const isDirty = computed(() => {
+    if (isCreate.value) return true;
+    if (!originalData.value) return false;
+    return JSON.stringify(formData.value) !== JSON.stringify(originalData.value);
 });
 
 function componentType(field) {
@@ -133,12 +141,13 @@ async function loadRecord() {
     try {
         const res = await api(`/api/${modelName.value}/${pk.value}/`);
         formData.value = initFormData(fields.value, await res.json());
+        originalData.value = JSON.parse(JSON.stringify(formData.value));
     } finally {
         loading.value = false;
     }
 }
 
-async function save() {
+async function save(andContinue = false) {
     saving.value = true;
     errors.value = {};
 
@@ -169,10 +178,49 @@ async function save() {
 
         if (isCreate.value) {
             const newPk = findPk(record);
-            if (newPk !== null) router.replace(`/${modelName.value}/${newPk}`);
+            if (newPk !== null) {
+                if (andContinue) {
+                    router.replace(`/${modelName.value}/${newPk}`);
+                } else {
+                    router.push(`/${modelName.value}`);
+                }
+            }
+        } else if (andContinue) {
+            originalData.value = JSON.parse(JSON.stringify(formData.value));
+        } else {
+            router.push(`/${modelName.value}`);
         }
     } finally {
         saving.value = false;
+    }
+}
+
+function confirmDelete() {
+    confirm.require({
+        message: `Are you sure you want to delete this ${schema.value?.title || 'record'}?`,
+        header: 'Confirm Delete',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Cancel',
+        rejectProps: { severity: 'secondary', text: true },
+        acceptLabel: 'Delete',
+        acceptProps: { severity: 'danger' },
+        accept: deleteRecord,
+    });
+}
+
+async function deleteRecord() {
+    deleting.value = true;
+    try {
+        const res = await api(`/api/${modelName.value}/${pk.value}/`, { method: 'DELETE' });
+        if (!res.ok) {
+            const data = await res.json();
+            toast.add({ severity: 'error', summary: 'Error', detail: data.detail || 'Delete failed', life: 5000 });
+            return;
+        }
+        toast.add({ severity: 'success', summary: 'Deleted', detail: `${schema.value.title} deleted`, life: 3000 });
+        router.push(`/${modelName.value}`);
+    } finally {
+        deleting.value = false;
     }
 }
 
@@ -210,78 +258,108 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="card">
-        <div class="flex justify-between items-center mb-4">
-            <div class="text-xl font-semibold">
-                {{ schema?.title || modelName }} {{ isCreate ? 'Create' : `#${pk}` }}
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
+        <!-- Left: form card -->
+        <div class="card">
+            <div class="flex justify-between items-center mb-4">
+                <div class="text-xl font-semibold">
+                    {{ schema?.title || modelName }} {{ isCreate ? 'Create' : `#${pk}` }}
+                </div>
+                <Button label="Back" icon="pi pi-arrow-left" text @click="goBack" />
             </div>
-            <Button label="Back" icon="pi pi-arrow-left" text @click="goBack" />
+
+            <div v-if="loading" class="flex justify-center p-8">
+                <ProgressSpinner />
+            </div>
+
+            <form v-else @submit.prevent="save(false)" class="flex flex-col gap-4">
+                <div v-for="field in visibleFields" :key="field.name" class="flex flex-col gap-1">
+                    <label :for="field.name" class="font-semibold">
+                        {{ field.label }}
+                        <span v-if="field.isRequired" class="text-red-500">*</span>
+                    </label>
+
+                    <!-- FK Select -->
+                    <Select
+                        v-if="componentType(field) === 'select'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :options="fkOptions[field.name] || []"
+                        optionLabel="label"
+                        optionValue="value"
+                        :showClear="!field.isRequired"
+                        placeholder="Select..."
+                        :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
+                    <!-- Boolean -->
+                    <ToggleSwitch
+                        v-else-if="componentType(field) === 'boolean'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                    />
+
+                    <!-- Number -->
+                    <InputNumber
+                        v-else-if="componentType(field) === 'number'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                        :useGrouping="false"
+                        :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
+                    <!-- Text -->
+                    <InputText
+                        v-else
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                        :maxlength="field.maxLength"
+                        :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
+                    <Message v-if="errors[field.name]" severity="error" size="small" variant="simple">
+                        {{ errors[field.name] }}
+                    </Message>
+                </div>
+            </form>
         </div>
 
-        <div v-if="loading" class="flex justify-center p-8">
-            <ProgressSpinner />
+        <!-- Right: actions card -->
+        <div class="card lg:sticky lg:top-24">
+            <div class="flex flex-col gap-3">
+                <Button
+                    :label="isCreate ? 'Create' : 'Save'"
+                    icon="pi pi-check"
+                    :loading="saving"
+                    :disabled="!isDirty"
+                    @click="save(false)"
+                />
+                <Button
+                    :label="isCreate ? 'Create & continue' : 'Save & continue'"
+                    icon="pi pi-save"
+                    severity="secondary"
+                    :loading="saving"
+                    :disabled="!isDirty"
+                    @click="save(true)"
+                />
+                <Button
+                    v-if="!isCreate"
+                    label="Delete"
+                    icon="pi pi-trash"
+                    severity="danger"
+                    outlined
+                    :loading="deleting"
+                    @click="confirmDelete"
+                />
+            </div>
         </div>
 
-        <form v-else @submit.prevent="save" class="flex flex-col gap-4 max-w-2xl">
-            <div v-for="field in visibleFields" :key="field.name" class="flex flex-col gap-1">
-                <label :for="field.name" class="font-semibold">
-                    {{ field.label }}
-                    <span v-if="field.isRequired" class="text-red-500">*</span>
-                </label>
-
-                <!-- FK Select -->
-                <Select
-                    v-if="componentType(field) === 'select'"
-                    :id="field.name"
-                    v-model="formData[field.name]"
-                    :options="fkOptions[field.name] || []"
-                    optionLabel="label"
-                    optionValue="value"
-                    :showClear="!field.isRequired"
-                    placeholder="Select..."
-                    :invalid="!!errors[field.name]"
-                    fluid
-                />
-
-                <!-- Boolean -->
-                <ToggleSwitch
-                    v-else-if="componentType(field) === 'boolean'"
-                    :id="field.name"
-                    v-model="formData[field.name]"
-                    :disabled="field.isReadonly"
-                />
-
-                <!-- Number -->
-                <InputNumber
-                    v-else-if="componentType(field) === 'number'"
-                    :id="field.name"
-                    v-model="formData[field.name]"
-                    :disabled="field.isReadonly"
-                    :useGrouping="false"
-                    :invalid="!!errors[field.name]"
-                    fluid
-                />
-
-                <!-- Text -->
-                <InputText
-                    v-else
-                    :id="field.name"
-                    v-model="formData[field.name]"
-                    :disabled="field.isReadonly"
-                    :maxlength="field.maxLength"
-                    :invalid="!!errors[field.name]"
-                    fluid
-                />
-
-                <Message v-if="errors[field.name]" severity="error" size="small" variant="simple">
-                    {{ errors[field.name] }}
-                </Message>
-            </div>
-
-            <div class="flex gap-2 mt-2">
-                <Button type="submit" :label="isCreate ? 'Create' : 'Save'" icon="pi pi-check" :loading="saving" />
-                <Button label="Cancel" icon="pi pi-times" severity="secondary" text @click="goBack" />
-            </div>
-        </form>
+        <ConfirmDialog />
     </div>
 </template>
