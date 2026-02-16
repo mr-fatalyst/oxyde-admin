@@ -20,6 +20,7 @@ const formData = ref({});
 const originalData = ref(null);
 const errors = ref({});
 const fkOptions = ref({});  // { fieldName: [{value, label}] }
+const columnLabels = ref({});
 const loading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
@@ -66,7 +67,7 @@ function extractFkMap(schemaData) {
     return map;
 }
 
-function buildFields(schemaData) {
+function buildFields(schemaData, labels) {
     const props = schemaData.properties || {};
     const required = new Set(schemaData.required || []);
     const fkMap = extractFkMap(schemaData);
@@ -79,7 +80,7 @@ function buildFields(schemaData) {
 
         result.push({
             name,
-            label: prop.title || name,
+            label: (labels && labels[name]) || prop.title || name,
             type: resolveType(prop),
             isPk: !!prop['x-db-primary-key'],
             isReadonly: !!prop['x-db-readonly'],
@@ -137,9 +138,15 @@ function buildPayload() {
 // --- API ---
 
 async function loadSchema() {
-    const res = await api(`/api/${modelName.value}/schema/`);
-    schema.value = await res.json();
-    fields.value = buildFields(schema.value);
+    const [schemaRes, modelsRes] = await Promise.all([
+        api(`/api/${modelName.value}/schema/`),
+        api('/api/models/'),
+    ]);
+    schema.value = await schemaRes.json();
+    const models = await modelsRes.json();
+    const meta = models.find((m) => m.name === modelName.value);
+    columnLabels.value = meta?.column_labels || {};
+    fields.value = buildFields(schema.value, columnLabels.value);
 }
 
 async function loadFkOptions() {

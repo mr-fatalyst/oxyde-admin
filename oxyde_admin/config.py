@@ -11,5 +11,6 @@ class ModelAdmin:
     readonly_fields: list[str] | None = None
     ordering: list[str] | None = None
     display_field: str | None = None
+    column_labels: dict[str, str] | None = None
     group: str | None = None
     icon: str | None = None

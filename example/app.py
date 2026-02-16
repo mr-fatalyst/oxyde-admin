@@ -78,9 +78,9 @@ app = FastAPI(
 # --- Admin ---
 
 admin = FastAPIAdmin()
-admin.register(Author, list_display=["name", "email", "is_active"], display_field="name", search_fields=["name", "email"], list_filter=["is_active"], group="Content", icon="pi pi-users")
+admin.register(Author, list_display=["name", "email", "is_active"], display_field="name", search_fields=["name", "email"], list_filter=["is_active"], column_labels={"is_active": "Active"}, group="Content", icon="pi pi-users")
 admin.register(Category, list_display=["name", "slug"], display_field="name", search_fields=["name"], group="Content", icon="pi pi-folder")
-admin.register(Post, list_display=["title", "author_id", "category_id", "views"], search_fields=["title", "content"], list_filter=["author_id", "category_id"], group="Content", icon="pi pi-file-edit")
-admin.register(Comment, list_display=["post_id", "author_name", "is_approved"], search_fields=["author_name", "body"], list_filter=["post_id", "is_approved"], group="Engagement", icon="pi pi-comments")
+admin.register(Post, list_display=["title", "author_id", "category_id", "views"], search_fields=["title", "content"], list_filter=["author_id", "category_id"], column_labels={"author_id": "Author", "category_id": "Category"}, group="Content", icon="pi pi-file-edit")
+admin.register(Comment, list_display=["post_id", "author_name", "is_approved"], search_fields=["author_name", "body"], list_filter=["post_id", "is_approved"], column_labels={"post_id": "Post", "author_name": "Author", "is_approved": "Approved"}, group="Engagement", icon="pi pi-comments")
 admin.register(Tag, list_display=["name"], display_field="name", search_fields=["name"])
 app.mount("/admin", admin.app)

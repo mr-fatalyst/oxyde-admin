@@ -115,6 +115,7 @@ class FastAPIAdmin(AbstractAdapter):
                     "ordering": config.ordering,
                     "display_field": config.display_field,
                     "list_filter": config.list_filter,
+                    "column_labels": config.column_labels,
                     "search_fields": config.search_fields,
                     "group": config.group,
                     "icon": config.icon,

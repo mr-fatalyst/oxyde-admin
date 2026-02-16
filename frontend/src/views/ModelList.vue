@@ -17,6 +17,7 @@ const fkLookup = ref({});  // { column_name: { id: label } }
 const fkModels = ref({});  // { column_name: fk_model_name }
 const colProps = ref({});   // { column_name: schema_property }
 const searchFields = ref(null);
+const columnLabels = ref({});
 const filters = ref({});       // PrimeVue filter state: { col: { value, matchMode } }
 const filterMeta = ref({});    // { col: { type, options? } }
 
@@ -64,6 +65,10 @@ function colType(col) {
     return 'default';
 }
 
+function colLabel(col) {
+    return columnLabels.value[col] || col;
+}
+
 function formatDatetime(val) {
     const d = new Date(val);
     if (isNaN(d)) return val;
@@ -79,6 +84,7 @@ async function loadMeta() {
     verboseName.value = meta.verbose_name;
     tableName.value = meta.name;
     searchFields.value = meta.search_fields;
+    columnLabels.value = meta.column_labels || {};
 
     const schemaRes = await api(`/api/${modelName.value}/schema/`);
     const schema = await schemaRes.json();
@@ -251,7 +257,7 @@ onMounted(async () => {
             rowHover
             class="cursor-pointer"
         >
-            <Column v-for="col in columns" :key="col" :field="col" :header="col" :sortable="true" :showFilterMenu="false">
+            <Column v-for="col in columns" :key="col" :field="col" :header="colLabel(col)" :sortable="true" :showFilterMenu="false">
                 <template v-if="filterMeta[col]" #filter="{ filterModel, filterCallback }">
                     <!-- FK filter -->
                     <Select
@@ -261,7 +267,7 @@ onMounted(async () => {
                         :options="filterMeta[col].options"
                         optionLabel="label"
                         optionValue="value"
-                        :placeholder="col"
+                        :placeholder="colLabel(col)"
                         showClear
                         class="w-full"
                     />
