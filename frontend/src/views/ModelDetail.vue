@@ -125,6 +125,19 @@ function initFormData(fieldList, record) {
     return data;
 }
 
+function validate(fieldList, data) {
+    const errs = {};
+    for (const f of fieldList) {
+        if (f.isRequired && !f.isPk && !f.isReadonly) {
+            const val = data[f.name];
+            if (val === null || val === undefined || val === '') {
+                errs[f.name] = 'This field is required';
+            }
+        }
+    }
+    return errs;
+}
+
 function buildPayload() {
     const payload = {};
     for (const f of fields.value) {
@@ -170,6 +183,12 @@ async function loadRecord() {
 }
 
 async function save(andContinue = false) {
+    const errs = validate(fields.value, formData.value);
+    if (Object.keys(errs).length > 0) {
+        errors.value = errs;
+        return;
+    }
+
     saving.value = true;
     errors.value = {};
 
@@ -301,6 +320,12 @@ async function openFkCreate(field) {
 }
 
 async function dlgSave() {
+    const errs = validate(dlgFields.value, dlgFormData.value);
+    if (Object.keys(errs).length > 0) {
+        dlgErrors.value = errs;
+        return;
+    }
+
     dlgSaving.value = true;
     dlgErrors.value = {};
 

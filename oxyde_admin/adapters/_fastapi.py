@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import inspect
 import io
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from oxyde.exceptions import NotFoundError, IntegrityError
 from oxyde_admin.adapters.base import AbstractAdapter
@@ -41,11 +43,28 @@ class FastAPIAdmin(AbstractAdapter):
     def _build_app(self) -> FastAPI:
         app = FastAPI(title="Oxyde Admin", docs_url=None, redoc_url=None)
 
+        if self.auth_check is not None:
+            self._register_auth_middleware(app)
+
         self._register_exception_handlers(app)
         self._register_api_routes(app)
         self._register_static(app)
 
         return app
+
+    def _register_auth_middleware(self, app: FastAPI) -> None:
+        check = self.auth_check
+
+        async def auth_middleware(request: Request, call_next):
+            if inspect.iscoroutinefunction(check):
+                allowed = await check(request)
+            else:
+                allowed = check(request)
+            if not allowed:
+                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            return await call_next(request)
+
+        app.add_middleware(BaseHTTPMiddleware, dispatch=auth_middleware)
 
     def _require_model(self, model_name: str):
         model = self._resolve_model(model_name)

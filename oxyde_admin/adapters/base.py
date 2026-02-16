@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 from oxyde_admin import AdminSite
 
@@ -18,12 +18,14 @@ class AbstractAdapter(AdminSite):
         preset: str = "Aura",
         primary_color: str = "sky",
         surface: str = "slate",
+        auth_check: Callable | None = None,
     ) -> None:
         super().__init__()
         self.title = title
         self.preset = preset
         self.primary_color = primary_color
         self.surface = surface
+        self.auth_check = auth_check
 
     def _resolve_model(self, name: str) -> type[OxydeModel] | None:
         """Find a registered model by its table name."""
