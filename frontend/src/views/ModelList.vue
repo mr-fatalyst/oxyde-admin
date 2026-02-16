@@ -17,6 +17,7 @@ const fkLookup = ref({});  // { column_name: { id: label } }
 const fkModels = ref({});  // { column_name: fk_model_name }
 const colProps = ref({});   // { column_name: schema_property }
 const searchFields = ref(null);
+const exportable = ref(false);
 const columnLabels = ref({});
 const filters = ref({});       // PrimeVue filter state: { col: { value, matchMode } }
 const filterMeta = ref({});    // { col: { type, options? } }
@@ -85,6 +86,7 @@ async function loadMeta() {
     tableName.value = meta.name;
     searchFields.value = meta.search_fields;
     columnLabels.value = meta.column_labels || {};
+    exportable.value = meta.exportable !== false;
 
     const schemaRes = await api(`/api/${modelName.value}/schema/`);
     const schema = await schemaRes.json();
@@ -187,6 +189,38 @@ function onFilterInput(filterCallback) {
     filterInputTimeout = setTimeout(filterCallback, 300);
 }
 
+function buildExportUrl(format) {
+    let url = `/api/${modelName.value}/export/?format=${format}`;
+    if (sortField.value) {
+        const prefix = sortOrder.value === -1 ? '-' : '';
+        url += `&ordering=${prefix}${sortField.value}`;
+    }
+    if (searchQuery.value) {
+        url += `&search=${encodeURIComponent(searchQuery.value)}`;
+    }
+    for (const [col, filter] of Object.entries(filters.value)) {
+        if (filter.value !== null && filter.value !== undefined && filter.value !== '') {
+            url += `&${col}=${encodeURIComponent(filter.value)}`;
+        }
+    }
+    return url;
+}
+
+async function exportData(format) {
+    const url = buildExportUrl(format);
+    const res = await api(url);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${modelName.value}.${format}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+const exportItems = [
+    { label: 'Export JSON', icon: 'pi pi-file', command: () => exportData('json') }
+];
+
 function onPage(event) {
     page.value = event.page + 1;
     perPage.value = event.rows;
@@ -232,6 +266,7 @@ onMounted(async () => {
                     <InputIcon class="pi pi-search" />
                     <InputText :placeholder="`Search ${verboseName}...`" @input="onSearch" />
                 </IconField>
+                <SplitButton v-if="exportable" label="CSV" icon="pi pi-download" severity="secondary" @click="exportData('csv')" :model="exportItems" />
                 <Button label="Create" icon="pi pi-plus" @click="router.push(`/${modelName}/create`)" />
             </div>
         </div>

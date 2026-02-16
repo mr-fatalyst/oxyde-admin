@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
+import io
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
@@ -116,6 +118,7 @@ class FastAPIAdmin(AbstractAdapter):
                     "display_field": config.display_field,
                     "list_filter": config.list_filter,
                     "column_labels": config.column_labels,
+                    "exportable": config.exportable,
                     "search_fields": config.search_fields,
                     "group": config.group,
                     "icon": config.icon,
@@ -162,6 +165,62 @@ class FastAPIAdmin(AbstractAdapter):
             config = self._registry.get(model)
             display = config.display_field if config else None
             return await get_options(model, display)
+
+        @app.get("/api/{model_name}/export/", response_model=None)
+        async def model_export(
+            request: Request,
+            model_name: str,
+            format: str = "csv",
+            ordering: str | None = None,
+            search: str | None = None,
+        ):
+            model = self._require_model(model_name)
+            config = self._registry.get(model)
+            order_list = ordering.split(",") if ordering else None
+            filters = self._extract_filters(model, request.query_params)
+            result = await list_records(
+                model,
+                page=1,
+                per_page=10000,
+                ordering=order_list,
+                filters=filters,
+                search=search,
+                search_fields=config.search_fields if config else None,
+            )
+            rows = [item.model_dump() for item in result.items]
+
+            if format == "json":
+                import json as json_mod
+
+                content = json_mod.dumps(rows, default=str, ensure_ascii=False)
+                return Response(
+                    content=content,
+                    media_type="application/json",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{model_name}.json"',
+                    },
+                )
+
+            # CSV
+            if not rows:
+                return Response(
+                    content="",
+                    media_type="text/csv",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{model_name}.csv"',
+                    },
+                )
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+            return Response(
+                content=buf.getvalue(),
+                media_type="text/csv",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{model_name}.csv"',
+                },
+            )
 
         @app.get("/api/{model_name}/{pk}/", response_model=None)
         async def model_get(model_name: str, pk: str):

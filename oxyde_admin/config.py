@@ -12,5 +12,6 @@ class ModelAdmin:
     ordering: list[str] | None = None
     display_field: str | None = None
     column_labels: dict[str, str] | None = None
+    exportable: bool = True
     group: str | None = None
     icon: str | None = None
