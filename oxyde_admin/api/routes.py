@@ -22,10 +22,21 @@ async def list_records(
     per_page: int = 25,
     ordering: list[str] | None = None,
     filters: dict[str, Any] | None = None,
+    search: str | None = None,
+    search_fields: list[str] | None = None,
 ) -> PaginatedResult:
     query = model.objects
     if filters:
         query = query.filter(**filters)
+
+    if search and search_fields:
+        from oxyde.queries.q import Q
+
+        conditions = [Q(**{f"{f}__icontains": search}) for f in search_fields]
+        q = conditions[0]
+        for c in conditions[1:]:
+            q = q | c
+        query = query.filter(q)
 
     total = await query.count()
 

@@ -16,11 +16,16 @@ const loading = ref(false);
 const fkLookup = ref({});  // { column_name: { id: label } }
 const fkModels = ref({});  // { column_name: fk_model_name }
 const colProps = ref({});   // { column_name: schema_property }
+const searchFields = ref(null);
+const filters = ref({});       // PrimeVue filter state: { col: { value, matchMode } }
+const filterMeta = ref({});    // { col: { type, options? } }
 
 const page = ref(1);
 const perPage = ref(25);
 const sortField = ref(null);
 const sortOrder = ref(null);
+const searchQuery = ref('');
+let searchTimeout = null;
 
 function buildColumnProps(schemaData) {
     const result = {};
@@ -73,6 +78,7 @@ async function loadMeta() {
 
     verboseName.value = meta.verbose_name;
     tableName.value = meta.name;
+    searchFields.value = meta.search_fields;
 
     const schemaRes = await api(`/api/${modelName.value}/schema/`);
     const schema = await schemaRes.json();
@@ -101,6 +107,33 @@ async function loadMeta() {
     });
     await Promise.all(promises);
     fkLookup.value = lookup;
+
+    // Build column filters for all visible columns
+    const fObj = {};
+    const fMeta = {};
+    const fkFilterPromises = [];
+    for (const col of columns.value) {
+        const type = colType(col);
+        if (type === 'datetime') continue;
+        fObj[col] = { value: null, matchMode: 'equals' };
+        if (type === 'fk') {
+            fMeta[col] = { type: 'fk' };
+            if (fkCols[col]) {
+                fkFilterPromises.push(
+                    api(`/api/${fkCols[col]}/options/`).then((r) => r.json()).then((opts) => {
+                        fMeta[col].options = opts;
+                    })
+                );
+            }
+        } else if (type === 'boolean') {
+            fMeta[col] = { type: 'boolean' };
+        } else {
+            fMeta[col] = { type: 'text' };
+        }
+    }
+    await Promise.all(fkFilterPromises);
+    filters.value = fObj;
+    filterMeta.value = fMeta;
 }
 
 async function loadRecords() {
@@ -111,6 +144,14 @@ async function loadRecords() {
             const prefix = sortOrder.value === -1 ? '-' : '';
             url += `&ordering=${prefix}${sortField.value}`;
         }
+        if (searchQuery.value) {
+            url += `&search=${encodeURIComponent(searchQuery.value)}`;
+        }
+        for (const [col, filter] of Object.entries(filters.value)) {
+            if (filter.value !== null && filter.value !== undefined && filter.value !== '') {
+                url += `&${col}=${encodeURIComponent(filter.value)}`;
+            }
+        }
         const res = await api(url);
         const data = await res.json();
         records.value = data.items;
@@ -118,6 +159,26 @@ async function loadRecords() {
     } finally {
         loading.value = false;
     }
+}
+
+function onSearch(event) {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        searchQuery.value = event.target.value;
+        page.value = 1;
+        loadRecords();
+    }, 300);
+}
+
+function onFilter() {
+    page.value = 1;
+    loadRecords();
+}
+
+let filterInputTimeout = null;
+function onFilterInput(filterCallback) {
+    clearTimeout(filterInputTimeout);
+    filterInputTimeout = setTimeout(filterCallback, 300);
 }
 
 function onPage(event) {
@@ -160,7 +221,13 @@ onMounted(async () => {
                 <span class="text-xl font-semibold">{{ verboseName }}</span>
                 <Tag :value="tableName" severity="secondary" class="font-mono text-xs" />
             </div>
-            <Button label="Create" icon="pi pi-plus" @click="router.push(`/${modelName}/create`)" />
+            <div class="flex items-center gap-2">
+                <IconField v-if="searchFields && searchFields.length > 0">
+                    <InputIcon class="pi pi-search" />
+                    <InputText :placeholder="`Search ${verboseName}...`" @input="onSearch" />
+                </IconField>
+                <Button label="Create" icon="pi pi-plus" @click="router.push(`/${modelName}/create`)" />
+            </div>
         </div>
 
         <DataTable
@@ -174,14 +241,51 @@ onMounted(async () => {
             :rowsPerPageOptions="[10, 25, 50]"
             :sortField="sortField"
             :sortOrder="sortOrder"
+            v-model:filters="filters"
+            filterDisplay="row"
             @page="onPage"
             @sort="onSort"
+            @filter="onFilter"
             @row-click="onRowClick"
             stripedRows
             rowHover
             class="cursor-pointer"
         >
-            <Column v-for="col in columns" :key="col" :field="col" :header="col" :sortable="true">
+            <Column v-for="col in columns" :key="col" :field="col" :header="col" :sortable="true" :showFilterMenu="false">
+                <template v-if="filterMeta[col]" #filter="{ filterModel, filterCallback }">
+                    <!-- FK filter -->
+                    <Select
+                        v-if="filterMeta[col].type === 'fk'"
+                        v-model="filterModel.value"
+                        @update:modelValue="filterCallback()"
+                        :options="filterMeta[col].options"
+                        optionLabel="label"
+                        optionValue="value"
+                        :placeholder="col"
+                        showClear
+                        class="w-full"
+                    />
+                    <!-- Boolean filter -->
+                    <Select
+                        v-else-if="filterMeta[col].type === 'boolean'"
+                        v-model="filterModel.value"
+                        @update:modelValue="filterCallback()"
+                        :options="[{ label: 'Yes', value: true }, { label: 'No', value: false }]"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="All"
+                        showClear
+                        class="w-full"
+                    />
+                    <!-- Text filter -->
+                    <InputText
+                        v-else
+                        v-model="filterModel.value"
+                        @input="onFilterInput(filterCallback)"
+                        placeholder="Filter..."
+                        class="w-full"
+                    />
+                </template>
                 <template #body="{ data }">
                     <!-- null -->
                     <span v-if="data[col] == null" class="text-surface-400 italic">NULL</span>

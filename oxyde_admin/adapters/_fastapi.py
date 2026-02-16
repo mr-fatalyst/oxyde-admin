@@ -51,6 +51,33 @@ class FastAPIAdmin(AbstractAdapter):
             raise HTTPException(status_code=404, detail="Model not found")
         return model
 
+    @staticmethod
+    def _extract_filters(model, query_params) -> dict | None:
+        """Extract filter values from query params for all model columns."""
+        col_map = {}
+        for name, col in model._db_meta.field_metadata.items():
+            col_map[col.db_column] = (name, col)
+
+        filters = {}
+        for col_name, (field_name, meta) in col_map.items():
+            val = query_params.get(col_name)
+            if val is None or val == "":
+                continue
+            if meta.foreign_key:
+                try:
+                    filters[field_name] = int(val)
+                except ValueError:
+                    filters[field_name] = val
+            elif meta.python_type is bool:
+                filters[field_name] = val.lower() == "true"
+            elif meta.python_type is int:
+                filters[field_name] = int(val)
+            elif meta.python_type is str:
+                filters[f"{field_name}__icontains"] = val
+            else:
+                filters[field_name] = val
+        return filters or None
+
     def _register_exception_handlers(self, app: FastAPI) -> None:
         @app.exception_handler(NotFoundError)
         async def _not_found(request: Request, exc: NotFoundError) -> JSONResponse:
@@ -87,6 +114,8 @@ class FastAPIAdmin(AbstractAdapter):
                     "list_display": config.list_display,
                     "ordering": config.ordering,
                     "display_field": config.display_field,
+                    "list_filter": config.list_filter,
+                    "search_fields": config.search_fields,
                     "group": config.group,
                     "icon": config.icon,
                 })
@@ -99,15 +128,25 @@ class FastAPIAdmin(AbstractAdapter):
 
         @app.get("/api/{model_name}/", response_model=None)
         async def model_list(
+            request: Request,
             model_name: str,
             page: int = 1,
             per_page: int = 25,
             ordering: str | None = None,
+            search: str | None = None,
         ):
             model = self._require_model(model_name)
+            config = self._registry.get(model)
             order_list = ordering.split(",") if ordering else None
+            filters = self._extract_filters(model, request.query_params)
             result = await list_records(
-                model, page=page, per_page=per_page, ordering=order_list,
+                model,
+                page=page,
+                per_page=per_page,
+                ordering=order_list,
+                filters=filters,
+                search=search,
+                search_fields=config.search_fields if config else None,
             )
             return {
                 "items": [item.model_dump() for item in result.items],
