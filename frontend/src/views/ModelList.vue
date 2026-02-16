@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/api.js';
 
@@ -146,18 +146,6 @@ function findPk(record) {
     const keys = Object.keys(record);
     return keys.length > 0 ? record[keys[0]] : null;
 }
-
-watch(
-    () => route.params.model,
-    async (newModel) => {
-        modelName.value = newModel;
-        page.value = 1;
-        sortField.value = null;
-        sortOrder.value = null;
-        await loadMeta();
-        await loadRecords();
-    }
-);
 
 onMounted(async () => {
     await loadMeta();

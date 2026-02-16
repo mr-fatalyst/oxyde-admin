@@ -24,7 +24,7 @@ const containerClass = computed(() => {
         <AppSidebar />
         <div class="layout-main-container">
             <div class="layout-main">
-                <router-view />
+                <router-view :key="$route.fullPath" />
             </div>
             <AppFooter />
         </div>

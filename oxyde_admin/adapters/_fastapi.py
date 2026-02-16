@@ -157,7 +157,12 @@ class FastAPIAdmin(AbstractAdapter):
         index_html = STATIC_DIR / "index.html"
 
         @app.get("/{path:path}", response_model=None)
-        async def catch_all(path: str):
+        async def catch_all(request: Request, path: str):
             if index_html.exists():
-                return HTMLResponse(index_html.read_text())
+                root = request.scope.get("root_path", "")
+                base_href = root.rstrip("/") + "/"
+                html = index_html.read_text().replace(
+                    "<head>", f'<head><base href="{base_href}">', 1,
+                )
+                return HTMLResponse(html)
             return JSONResponse({"detail": "Frontend not built"}, status_code=404)
