@@ -19,6 +19,7 @@ class AbstractAdapter(AdminSite):
         primary_color: str = "sky",
         surface: str = "slate",
         auth_check: Callable | None = None,
+        login_url: str | None = None,
     ) -> None:
         super().__init__()
         self.title = title
@@ -26,6 +27,7 @@ class AbstractAdapter(AdminSite):
         self.primary_color = primary_color
         self.surface = surface
         self.auth_check = auth_check
+        self.login_url = login_url
 
     def _resolve_model(self, name: str) -> type[OxydeModel] | None:
         """Find a registered model by its table name."""

@@ -1,6 +1,6 @@
 import { createApp } from 'vue';
 import App from './App.vue';
-import router from './router.js';
+import router, { setAuthEnabled } from './router.js';
 import { api } from '@/api.js';
 import { applyThemeConfig, presets } from '@/layout/composables/theme.js';
 
@@ -21,6 +21,10 @@ async function bootstrap() {
         // use defaults
     }
 
+    if (config.auth_enabled) {
+        setAuthEnabled(true);
+    }
+
     const app = createApp(App);
 
     app.use(router);
@@ -39,6 +43,8 @@ async function bootstrap() {
     document.title = title;
     app.provide('adminTitle', title);
     app.provide('adminVersion', config.version || '');
+    app.provide('loginUrl', config.login_url || null);
+    app.provide('authEnabled', config.auth_enabled || false);
 
     app.mount('#app');
 

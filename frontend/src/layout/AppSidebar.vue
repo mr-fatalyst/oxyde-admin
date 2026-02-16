@@ -64,7 +64,7 @@ onBeforeUnmount(() => {
     <div ref="sidebarRef" class="layout-sidebar flex flex-col">
         <AppMenu class="flex-1 overflow-y-auto" />
         <div v-if="adminVersion" class="px-4 py-3 text-xs text-surface-400 text-center border-t border-surface-200 dark:border-surface-700">
-            Version {{ adminVersion }}
+            Oxyde Admin v{{ adminVersion }}
         </div>
     </div>
 </template>

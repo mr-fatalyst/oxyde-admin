@@ -7,7 +7,7 @@ import io
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, HTMLResponse, Response
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -57,6 +57,17 @@ class FastAPIAdmin(AbstractAdapter):
         check = self.auth_check
 
         async def auth_middleware(request: Request, call_next):
+            # Use scope path stripped of root_path (mount prefix)
+            root = request.scope.get("root_path", "")
+            raw_path = request.scope.get("path", request.url.path)
+            path = (
+                raw_path[len(root) :]
+                if root and raw_path.startswith(root)
+                else raw_path
+            )
+            # Allow static files and config endpoint without auth
+            if not path.startswith("/api/") or path == "/api/config/":
+                return await call_next(request)
             if inspect.iscoroutinefunction(check):
                 allowed = await check(request)
             else:
@@ -126,6 +137,8 @@ class FastAPIAdmin(AbstractAdapter):
                 "primary_color": self.primary_color,
                 "surface": self.surface,
                 "version": version,
+                "auth_enabled": self.auth_check is not None,
+                "login_url": self.login_url,
             }
 
         @app.get("/api/models/")
@@ -134,20 +147,22 @@ class FastAPIAdmin(AbstractAdapter):
             for model, config in self._registry.items():
                 model.ensure_field_metadata()
                 meta = model._db_meta
-                result.append({
-                    "name": meta.table_name,
-                    "verbose_name": model.__name__,
-                    "field_count": len(meta.field_metadata),
-                    "list_display": config.list_display,
-                    "ordering": config.ordering,
-                    "display_field": config.display_field,
-                    "list_filter": config.list_filter,
-                    "column_labels": config.column_labels,
-                    "exportable": config.exportable,
-                    "search_fields": config.search_fields,
-                    "group": config.group,
-                    "icon": config.icon,
-                })
+                result.append(
+                    {
+                        "name": meta.table_name,
+                        "verbose_name": model.__name__,
+                        "field_count": len(meta.field_metadata),
+                        "list_display": config.list_display,
+                        "ordering": config.ordering,
+                        "display_field": config.display_field,
+                        "list_filter": config.list_filter,
+                        "column_labels": config.column_labels,
+                        "exportable": config.exportable,
+                        "search_fields": config.search_fields,
+                        "group": config.group,
+                        "icon": config.icon,
+                    }
+                )
             return result
 
         @app.get("/api/models/counts/")
@@ -290,11 +305,17 @@ class FastAPIAdmin(AbstractAdapter):
 
         @app.get("/{path:path}", response_model=None)
         async def catch_all(request: Request, path: str):
+            if path:
+                file_path = (STATIC_DIR / path).resolve()
+                if file_path.is_relative_to(STATIC_DIR) and file_path.is_file():
+                    return FileResponse(file_path)
             if index_html.exists():
                 root = request.scope.get("root_path", "")
                 base_href = root.rstrip("/") + "/"
                 html = index_html.read_text().replace(
-                    "<head>", f'<head><base href="{base_href}">', 1,
+                    "<head>",
+                    f'<head><base href="{base_href}">',
+                    1,
                 )
                 return HTMLResponse(html)
             return JSONResponse({"detail": "Frontend not built"}, status_code=404)

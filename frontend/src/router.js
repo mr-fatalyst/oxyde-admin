@@ -2,9 +2,20 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { BASE } from '@/api.js';
 import AppLayout from '@/layout/AppLayout.vue';
 
+let authEnabled = false;
+
+export function setAuthEnabled(value) {
+    authEnabled = value;
+}
+
 const router = createRouter({
     history: createWebHistory(BASE),
     routes: [
+        {
+            path: '/login',
+            name: 'login',
+            component: () => import('@/views/Login.vue'),
+        },
         {
             path: '/',
             component: AppLayout,
@@ -32,6 +43,14 @@ const router = createRouter({
             ]
         }
     ]
+});
+
+router.beforeEach((to) => {
+    if (!authEnabled) return true;
+    if (to.name === 'login') return true;
+    const token = localStorage.getItem('admin_token');
+    if (!token) return { name: 'login' };
+    return true;
 });
 
 router.previousRoute = null;

@@ -11,6 +11,9 @@ dependencies = [
     "oxyde>=0.3.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["oxyde_admin*"]
+
 [tool.setuptools.package-data]
 oxyde_admin = ["static/**/*"]
 
@@ -18,4 +21,7 @@ oxyde_admin = ["static/**/*"]
 dev = [
     "pytest",
     "pytest-asyncio",
+    "fastapi",
+    "uvicorn",
+    "pyjwt",
 ]

@@ -1,16 +1,12 @@
-.PHONY: install dev-back dev-front build dev fixture
+.PHONY: install install-front dev-front build run-fastapi fixture-fastapi
 
 VENV = .venv/bin
 
 install:
 	$(VENV)/pip install -e ".[dev]"
-	$(VENV)/pip install uvicorn
 
 install-front:
 	cd frontend && npm install
-
-dev-back:
-	cd example && ../$(VENV)/uvicorn app:app --reload --port 8000
 
 dev-front:
 	cd frontend && npm run dev
@@ -18,8 +14,8 @@ dev-front:
 build:
 	cd frontend && npm run build
 
-fixture:
-	cd example && ../$(VENV)/python fixture.py
+run-fastapi:
+	cd examples/fastapi_example && ../../$(VENV)/uvicorn app:app --reload --port 8000
 
-dev:
-	$(MAKE) dev-back & $(MAKE) dev-front & wait
+fixture-fastapi:
+	cd examples/fastapi_example && ../../$(VENV)/python fixture.py

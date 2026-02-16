@@ -18,7 +18,12 @@ function detectBase() {
 
 export const BASE = detectBase();
 
+/** Base URL of the main application (without the admin mount path). */
+export const APP_BASE = BASE.replace(/[^/]+\/$/, '');
+
 const API_PREFIX = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
+
+const TOKEN_KEY = 'admin_token';
 
 const _errorListeners = [];
 
@@ -26,9 +31,21 @@ export function onApiError(callback) {
     _errorListeners.push(callback);
 }
 
-export async function api(path, options) {
+export async function api(path, options = {}) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+        options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
+    }
     const res = await fetch(API_PREFIX + path, options);
     if (!res.ok) {
+        if (res.status === 401) {
+            localStorage.removeItem(TOKEN_KEY);
+            const { default: router } = await import('@/router.js');
+            if (router.currentRoute.value.name !== 'login') {
+                router.push('/login');
+            }
+            return res;
+        }
         let message = `${res.status} ${res.statusText}`;
         try {
             const body = await res.clone().json();

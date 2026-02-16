@@ -1,24 +1,23 @@
 import asyncio
 import random
+import re
 
 from oxyde import db, execute_raw
 
-from app import DB_URL, Author, Post, Category, Comment, Tag
+from models import DB_URL, User, Category, Post, Comment, Tag
+from auth import hash_password
 
 
-AUTHORS = [
-    ("Alice Johnson", "alice@example.com", True),
-    ("Bob Smith", "bob@example.com", False),
-    ("Carol White", "carol@example.com", True),
-    ("Dave Brown", "dave@example.com", True),
-    ("Eve Davis", "eve@example.com", False),
-    ("Frank Miller", "frank@example.com", True),
-    ("Grace Wilson", "grace@example.com", True),
-    ("Hank Moore", "hank@example.com", False),
-    ("Ivy Taylor", "ivy@example.com", True),
-    ("Jack Anderson", "jack@example.com", True),
-    ("Karen Thomas", "karen@example.com", True),
-    ("Leo Martinez", "leo@example.com", False),
+def slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+USERS = [
+    ("Admin", "admin@example.com", "admin", True),
+    ("Alice Johnson", "alice@example.com", "alice123", False),
+    ("Bob Smith", "bob@example.com", "bob123", False),
+    ("Carol White", "carol@example.com", "carol123", False),
+    ("Dave Brown", "dave@example.com", "dave123", False),
 ]
 
 CATEGORIES = [
@@ -30,9 +29,21 @@ CATEGORIES = [
 ]
 
 TAGS = [
-    "python", "async", "orm", "sqlite", "postgresql",
-    "fastapi", "pydantic", "testing", "deployment", "docker",
-    "performance", "security", "beginner", "advanced", "tutorial",
+    "python",
+    "async",
+    "orm",
+    "sqlite",
+    "postgresql",
+    "fastapi",
+    "pydantic",
+    "testing",
+    "deployment",
+    "docker",
+    "performance",
+    "security",
+    "beginner",
+    "advanced",
+    "tutorial",
 ]
 
 TITLES = [
@@ -120,9 +131,18 @@ COMMENT_BODIES = [
 ]
 
 COMMENTER_NAMES = [
-    "anonymous", "dev_jane", "rustfan42", "py_newbie",
-    "dbadmin", "webdev_mike", "sarah_codes", "linux_user",
-    "async_lover", "sql_guru", "fastapi_fan", "beginner123",
+    "anonymous",
+    "dev_jane",
+    "rustfan42",
+    "py_newbie",
+    "dbadmin",
+    "webdev_mike",
+    "sarah_codes",
+    "linux_user",
+    "async_lover",
+    "sql_guru",
+    "fastapi_fan",
+    "beginner123",
 ]
 
 
@@ -130,11 +150,12 @@ async def main():
     await db.init(default=DB_URL)
 
     await execute_raw("""
-        CREATE TABLE IF NOT EXISTS authors (
+        CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             email TEXT NOT NULL UNIQUE,
-            is_active BOOLEAN NOT NULL DEFAULT 1
+            password_hash TEXT NOT NULL DEFAULT '',
+            is_admin BOOLEAN NOT NULL DEFAULT 0
         )
     """)
     await execute_raw("""
@@ -148,10 +169,12 @@ async def main():
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
             content TEXT NOT NULL DEFAULT '',
             views INTEGER NOT NULL DEFAULT 0,
-            author_id INTEGER REFERENCES authors(id) ON DELETE CASCADE,
-            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL
+            author_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+            is_published BOOLEAN NOT NULL DEFAULT 1
         )
     """)
     await execute_raw("""
@@ -170,20 +193,24 @@ async def main():
         )
     """)
 
-    count = await Author.objects.count()
+    count = await User.objects.count()
     if count > 0:
-        print(f"Already has {count} authors, skipping")
+        print(f"Already has {count} users, skipping")
         await db.close()
         return
 
     random.seed(42)
 
-    # Authors
-    authors = []
-    for name, email, is_active in AUTHORS:
-        author = await Author.objects.create(name=name, email=email, is_active=is_active)
-        authors.append(author)
-    active_authors = [a for a in authors if a.is_active]
+    # Users
+    users = []
+    for name, email, password, is_admin in USERS:
+        user = await User.objects.create(
+            name=name,
+            email=email,
+            password_hash=hash_password(password),
+            is_admin=is_admin,
+        )
+        users.append(user)
 
     # Categories
     categories = []
@@ -200,33 +227,38 @@ async def main():
     # Posts
     posts = []
     for i, title in enumerate(TITLES):
-        author = random.choice(active_authors)
+        author = random.choice(users)
         category = random.choice(categories)
         views = random.randint(0, 5000)
         content = f"Content for article #{i + 1}: {title}. " * random.randint(1, 4)
         post = await Post.objects.create(
             title=title,
+            slug=slugify(title),
             content=content.strip(),
             views=views,
             author_id=author.id,
             category_id=category.id,
+            is_published=True,
         )
         posts.append(post)
 
     for title in EXTRA_TITLES:
-        author = random.choice(authors)
+        author = random.choice(users)
         category = random.choice(categories)
         views = random.randint(0, 2000)
+        published = random.random() > 0.2
         post = await Post.objects.create(
             title=title,
+            slug=slugify(title),
             content=f"Content for {title}.",
             views=views,
             author_id=author.id,
             category_id=category.id,
+            is_published=published,
         )
         posts.append(post)
 
-    # Comments (spread across posts, ~120 total)
+    # Comments
     for post in posts:
         num_comments = random.randint(0, 5)
         for _ in range(num_comments):
@@ -239,8 +271,11 @@ async def main():
 
     total_posts = await Post.objects.count()
     total_comments = await Comment.objects.count()
-    print(f"Seeded {len(authors)} authors, {len(categories)} categories, "
-          f"{total_posts} posts, {total_comments} comments, {len(tags)} tags")
+    print(
+        f"Seeded {len(users)} users, {len(categories)} categories, "
+        f"{total_posts} posts, {total_comments} comments, {len(tags)} tags"
+    )
+    print("Admin login: admin@example.com / admin")
 
     await db.close()
 
