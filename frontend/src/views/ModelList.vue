@@ -8,6 +8,7 @@ const router = useRouter();
 
 const modelName = ref(route.params.model);
 const verboseName = ref('');
+const tableName = ref('');
 const columns = ref([]);
 const records = ref([]);
 const totalRecords = ref(0);
@@ -42,6 +43,7 @@ async function loadMeta() {
     if (!meta) return;
 
     verboseName.value = meta.verbose_name;
+    tableName.value = meta.name;
 
     const schemaRes = await api(`/api/${modelName.value}/schema/`);
     const schema = await schemaRes.json();
@@ -144,7 +146,10 @@ onMounted(async () => {
 <template>
     <div class="card">
         <div class="flex justify-between items-center mb-4">
-            <div class="text-xl font-semibold">{{ verboseName }}</div>
+            <div class="flex items-center gap-2">
+                <span class="text-xl font-semibold">{{ verboseName }}</span>
+                <Tag :value="tableName" severity="secondary" class="font-mono text-xs" />
+            </div>
             <Button label="Create" icon="pi pi-plus" @click="router.push(`/${modelName}/create`)" />
         </div>
 

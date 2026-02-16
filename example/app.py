@@ -23,16 +23,48 @@ class Author(OxydeModel):
         table_name = "authors"
 
 
+class Category(OxydeModel):
+    id: int | None = Field(default=None, db_pk=True)
+    name: str = Field(max_length=100, db_unique=True)
+    slug: str = Field(max_length=100, db_unique=True)
+
+    class Meta:
+        is_table = True
+        table_name = "categories"
+
+
 class Post(OxydeModel):
     id: int | None = Field(default=None, db_pk=True)
     title: str = Field(max_length=200)
     content: str = ""
     views: int = 0
     author: Author | None = Field(default=None, db_on_delete="CASCADE")
+    category: Category | None = Field(default=None, db_on_delete="SET NULL")
 
     class Meta:
         is_table = True
         table_name = "posts"
+
+
+class Comment(OxydeModel):
+    id: int | None = Field(default=None, db_pk=True)
+    post: Post | None = Field(default=None, db_on_delete="CASCADE")
+    author_name: str = Field(max_length=100)
+    body: str
+    is_approved: bool = False
+
+    class Meta:
+        is_table = True
+        table_name = "comments"
+
+
+class Tag(OxydeModel):
+    id: int | None = Field(default=None, db_pk=True)
+    name: str = Field(max_length=50, db_unique=True)
+
+    class Meta:
+        is_table = True
+        table_name = "tags"
 
 
 # --- App ---
@@ -46,6 +78,9 @@ app = FastAPI(
 # --- Admin ---
 
 admin = FastAPIAdmin()
-admin.register(Author, list_display=["name", "email", "is_active"], display_field="name")
-admin.register(Post, list_display=["title", "author_id", "views"])
+admin.register(Author, list_display=["name", "email", "is_active"], display_field="name", group="Content", icon="pi pi-users")
+admin.register(Category, list_display=["name", "slug"], display_field="name", group="Content", icon="pi pi-folder")
+admin.register(Post, list_display=["title", "author_id", "category_id", "views"], group="Content", icon="pi pi-file-edit")
+admin.register(Comment, list_display=["post_id", "author_name", "is_approved"], group="Engagement", icon="pi pi-comments")
+admin.register(Tag, list_display=["name"], display_field="name")
 app.mount("/admin", admin.app)

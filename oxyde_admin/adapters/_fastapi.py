@@ -87,6 +87,8 @@ class FastAPIAdmin(AbstractAdapter):
                     "list_display": config.list_display,
                     "ordering": config.ordering,
                     "display_field": config.display_field,
+                    "group": config.group,
+                    "icon": config.icon,
                 })
             return result
 

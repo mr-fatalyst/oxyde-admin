@@ -13,10 +13,6 @@ const model = ref([
                 to: '/'
             }
         ]
-    },
-    {
-        label: 'Models',
-        items: []
     }
 ]);
 
@@ -24,11 +20,36 @@ onMounted(async () => {
     try {
         const res = await api('/api/models/');
         const models = await res.json();
-        model.value[1].items = models.map((m) => ({
-            label: m.verbose_name,
-            icon: 'pi pi-fw pi-database',
-            to: '/' + m.name
-        }));
+
+        const groups = {};
+        const ungrouped = [];
+
+        for (const m of models) {
+            const item = {
+                label: m.verbose_name,
+                icon: m.icon || null,
+                to: '/' + m.name
+            };
+
+            if (m.group) {
+                if (!groups[m.group]) {
+                    groups[m.group] = [];
+                }
+                groups[m.group].push(item);
+            } else {
+                ungrouped.push(item);
+            }
+        }
+
+        const sections = [];
+        for (const [label, items] of Object.entries(groups)) {
+            sections.push({ label, items });
+        }
+        if (ungrouped.length > 0) {
+            sections.push({ label: 'Models', items: ungrouped });
+        }
+
+        model.value = [model.value[0], ...sections];
     } catch (e) {
         console.error('Failed to load models:', e);
     }

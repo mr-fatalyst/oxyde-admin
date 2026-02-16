@@ -213,7 +213,7 @@ onMounted(async () => {
     <div class="card">
         <div class="flex justify-between items-center mb-4">
             <div class="text-xl font-semibold">
-                {{ schema?.title || modelName }} — {{ isCreate ? 'Create' : `#${pk}` }}
+                {{ schema?.title || modelName }} {{ isCreate ? 'Create' : `#${pk}` }}
             </div>
             <Button label="Back" icon="pi pi-arrow-left" text @click="goBack" />
         </div>
