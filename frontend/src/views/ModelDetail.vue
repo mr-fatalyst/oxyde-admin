@@ -265,7 +265,11 @@ function parseValidationErrors(data) {
 }
 
 function goBack() {
-    router.push(`/${modelName.value}`);
+    if (router.previousRoute && router.previousRoute !== '/') {
+        router.back();
+    } else {
+        router.push(`/${modelName.value}`);
+    }
 }
 
 function openFkRecord(field) {

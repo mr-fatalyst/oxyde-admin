@@ -125,6 +125,14 @@ class FastAPIAdmin(AbstractAdapter):
                 })
             return result
 
+        @app.get("/api/models/counts/")
+        async def models_counts() -> dict[str, int]:
+            result = {}
+            for model in self._registry:
+                count = await model.objects.count()
+                result[model._db_meta.table_name] = count
+            return result
+
         @app.get("/api/{model_name}/schema/", response_model=None)
         async def model_schema(model_name: str):
             model = self._require_model(model_name)

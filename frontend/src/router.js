@@ -34,4 +34,9 @@ const router = createRouter({
     ]
 });
 
+router.previousRoute = null;
+router.afterEach((to, from) => {
+    router.previousRoute = from.fullPath;
+});
+
 export default router;

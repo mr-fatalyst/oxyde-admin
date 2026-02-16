@@ -4,34 +4,67 @@ import { useRouter } from 'vue-router';
 import { api } from '@/api.js';
 
 const router = useRouter();
-const stats = ref([]);
+const groups = ref([]);
 
 onMounted(async () => {
-    const res = await api('/api/models/');
-    const models = await res.json();
+    const [modelsRes, countsRes] = await Promise.all([
+        api('/api/models/'),
+        api('/api/models/counts/'),
+    ]);
+    const models = await modelsRes.json();
+    const counts = await countsRes.json();
+    const items = models.map((m) => ({ ...m, total: counts[m.name] || 0 }));
 
-    const items = await Promise.all(
-        models.map(async (m) => {
-            const r = await api(`/api/${m.name}/?per_page=1`);
-            const data = await r.json();
-            return { name: m.name, verbose_name: m.verbose_name, total: data.total };
-        })
-    );
-    stats.value = items;
+    const grouped = {};
+    const ungrouped = [];
+    for (const m of items) {
+        if (m.group) {
+            if (!grouped[m.group]) grouped[m.group] = [];
+            grouped[m.group].push(m);
+        } else {
+            ungrouped.push(m);
+        }
+    }
+
+    const sections = [];
+    for (const [label, models] of Object.entries(grouped)) {
+        sections.push({ label, models });
+    }
+    if (ungrouped.length > 0) {
+        sections.push({ label: 'Models', models: ungrouped });
+    }
+    groups.value = sections;
 });
 </script>
 
 <template>
-    <div class="card">
-        <div class="text-xl font-semibold mb-4">Overview</div>
-        <DataTable :value="stats" stripedRows>
-            <Column field="verbose_name" header="Model" />
-            <Column field="total" header="Records" />
-            <Column header="">
-                <template #body="{ data }">
-                    <Button label="Open" icon="pi pi-arrow-right" text size="small" @click="router.push('/' + data.name)" />
-                </template>
-            </Column>
-        </DataTable>
+    <div class="flex flex-col gap-6">
+        <div v-for="group in groups" :key="group.label">
+            <div class="text-lg font-semibold mb-3 text-surface-500">{{ group.label }}</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div
+                    v-for="m in group.models"
+                    :key="m.name"
+                    class="card !mb-0 cursor-pointer hover:border-primary transition-colors"
+                    @click="router.push('/' + m.name)"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
+                                <i :class="[m.icon || 'pi pi-database', 'text-primary text-xl']" />
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-semibold">{{ m.verbose_name }}</span>
+                                    <Tag :value="m.name" severity="secondary" class="font-mono text-xs" />
+                                </div>
+                                <div class="text-sm text-surface-500">{{ m.total }} records</div>
+                            </div>
+                        </div>
+                        <i class="pi pi-chevron-right text-surface-400" />
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
