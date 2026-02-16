@@ -1,6 +1,6 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { computed } from 'vue';
+import { ref } from 'vue';
 
 const { layoutState, isDesktop } = useLayout();
 
@@ -13,17 +13,9 @@ const props = defineProps({
         type: Boolean,
         default: true
     },
-    parentPath: {
-        type: String,
-        default: null
-    }
 });
 
-const fullPath = computed(() => (props.item.path ? (props.parentPath ? props.parentPath + props.item.path : props.item.path) : null));
-
-const isActive = computed(() => {
-    return props.item.path ? layoutState.activePath?.startsWith(fullPath.value) : layoutState.activePath === props.item.to;
-});
+const open = ref(false);
 
 const itemClick = (event, item) => {
     if (item.disabled) {
@@ -36,42 +28,30 @@ const itemClick = (event, item) => {
     }
 
     if (item.items) {
-        if (isActive.value) {
-            layoutState.activePath = layoutState.activePath.replace(item.path, '');
-        } else {
-            layoutState.activePath = fullPath.value;
-            layoutState.menuHoverActive = true;
-        }
+        open.value = !open.value;
     } else {
         layoutState.overlayMenuActive = false;
         layoutState.mobileMenuActive = false;
         layoutState.menuHoverActive = false;
     }
 };
-
-const onMouseEnter = () => {
-    if (isDesktop() && props.root && props.item.items && layoutState.menuHoverActive) {
-        layoutState.activePath = fullPath.value;
-    }
-};
 </script>
 
 <template>
-    <li :class="{ 'layout-root-menuitem': root, 'active-menuitem': isActive }">
-        <div v-if="root && item.visible !== false" class="layout-menuitem-root-text">{{ item.label }}</div>
-        <a v-if="(!item.to || item.items) && item.visible !== false" :href="item.url" @click="itemClick($event, item)" :class="item.class" :target="item.target" tabindex="0" @mouseenter="onMouseEnter">
+    <li :class="{ 'layout-root-menuitem': root, 'active-menuitem': open }">
+        <div v-if="root && item.label && item.visible !== false" class="layout-menuitem-root-text">{{ item.label }}</div>
+        <a v-if="(!item.to || item.items) && item.visible !== false" :href="item.url" @click="itemClick($event, item)" :class="item.class" :target="item.target" tabindex="0">
             <i :class="item.icon" class="layout-menuitem-icon" />
             <span class="layout-menuitem-text">{{ item.label }}</span>
             <i class="pi pi-fw pi-angle-down layout-submenu-toggler" v-if="item.items" />
         </a>
-        <router-link v-if="item.to && !item.items && item.visible !== false" @click="itemClick($event, item)" exactActiveClass="active-route" :class="item.class" tabindex="0" :to="item.to" @mouseenter="onMouseEnter">
+        <router-link v-if="item.to && !item.items && item.visible !== false" @click="itemClick($event, item)" exactActiveClass="active-route" :class="item.class" tabindex="0" :to="item.to">
             <i :class="item.icon" class="layout-menuitem-icon" />
             <span class="layout-menuitem-text">{{ item.label }}</span>
-            <i class="pi pi-fw pi-angle-down layout-submenu-toggler" v-if="item.items" />
         </router-link>
         <Transition v-if="item.items && item.visible !== false" name="layout-submenu">
-            <ul v-show="root ? true : isActive" class="layout-submenu">
-                <app-menu-item v-for="child in item.items" :key="child.label + '_' + (child.to || child.path)" :item="child" :root="false" :parentPath="fullPath" />
+            <ul v-show="root ? true : open" class="layout-submenu">
+                <app-menu-item v-for="child in item.items" :key="child.label + '_' + (child.to || '')" :item="child" :root="false" />
             </ul>
         </Transition>
     </li>

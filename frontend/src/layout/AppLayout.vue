@@ -27,7 +27,7 @@ onMounted(async () => {
     }
 });
 
-const breadcrumbHome = { icon: 'pi pi-home', to: '/' };
+const breadcrumbHome = { icon: 'pi pi-home', route: '/' };
 
 const breadcrumbItems = computed(() => {
     const model = route.params.model;
@@ -44,7 +44,7 @@ const breadcrumbItems = computed(() => {
 
     items.push({
         label: meta?.verbose_name || model,
-        to: `/${model}`
+        route: `/${model}`
     });
 
     if (route.name === 'model-create') {
@@ -73,7 +73,19 @@ const containerClass = computed(() => {
         <AppSidebar />
         <div class="layout-main-container">
             <div class="layout-main">
-                <Breadcrumb v-if="breadcrumbItems.length > 0" :home="breadcrumbHome" :model="breadcrumbItems" class="mb-4" />
+                <Breadcrumb v-if="breadcrumbItems.length > 0" :home="breadcrumbHome" :model="breadcrumbItems" class="mb-4">
+                    <template #item="{ item, props }">
+                        <router-link v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>
+                            <a :href="href" v-bind="props.action" @click="navigate">
+                                <span v-if="item.icon" :class="[item.icon]" />
+                                <span>{{ item.label }}</span>
+                            </a>
+                        </router-link>
+                        <a v-else v-bind="props.action">
+                            <span>{{ item.label }}</span>
+                        </a>
+                    </template>
+                </Breadcrumb>
                 <router-view :key="$route.fullPath" />
             </div>
             <AppFooter />

@@ -1,10 +1,11 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { inject, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppMenu from './AppMenu.vue';
 
 const { layoutState, isDesktop, hasOpenOverlay } = useLayout();
+const adminVersion = inject('adminVersion', '');
 const route = useRoute();
 const sidebarRef = ref(null);
 let outsideClickListener = null;
@@ -60,7 +61,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div ref="sidebarRef" class="layout-sidebar">
-        <AppMenu />
+    <div ref="sidebarRef" class="layout-sidebar flex flex-col">
+        <AppMenu class="flex-1 overflow-y-auto" />
+        <div v-if="adminVersion" class="px-4 py-3 text-xs text-surface-400 text-center border-t border-surface-200 dark:border-surface-700">
+            Version {{ adminVersion }}
+        </div>
     </div>
 </template>

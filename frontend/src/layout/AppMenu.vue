@@ -5,13 +5,9 @@ import AppMenuItem from './AppMenuItem.vue';
 
 const model = ref([
     {
-        label: 'Home',
+        label: 'Main',
         items: [
-            {
-                label: 'Dashboard',
-                icon: 'pi pi-fw pi-home',
-                to: '/'
-            }
+            { label: 'Dashboard', icon: 'pi pi-home', to: '/' }
         ]
     }
 ]);
@@ -27,7 +23,7 @@ onMounted(async () => {
         for (const m of models) {
             const item = {
                 label: m.verbose_name,
-                icon: m.icon || null,
+                icon: m.icon || 'pi pi-database',
                 to: '/' + m.name
             };
 
@@ -41,15 +37,20 @@ onMounted(async () => {
             }
         }
 
-        const sections = [];
+        const modelsItems = [];
         for (const [label, items] of Object.entries(groups)) {
-            sections.push({ label, items });
+            modelsItems.push({
+                label,
+                path: '/group-' + label.toLowerCase(),
+                items,
+            });
         }
-        if (ungrouped.length > 0) {
-            sections.push({ label: 'Models', items: ungrouped });
-        }
+        modelsItems.push(...ungrouped);
 
-        model.value = [model.value[0], ...sections];
+        model.value = [
+            model.value[0],
+            { label: 'Models', items: modelsItems },
+        ];
     } catch (e) {
         console.error('Failed to load models:', e);
     }

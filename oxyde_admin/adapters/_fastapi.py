@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import csv
+import importlib.metadata
 import inspect
 import io
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -115,11 +116,16 @@ class FastAPIAdmin(AbstractAdapter):
     def _register_api_routes(self, app: FastAPI) -> None:
         @app.get("/api/config/")
         async def admin_config() -> dict:
+            try:
+                version = importlib.metadata.version("oxyde-admin")
+            except importlib.metadata.PackageNotFoundError:
+                version = "dev"
             return {
                 "title": self.title,
                 "preset": self.preset,
                 "primary_color": self.primary_color,
                 "surface": self.surface,
+                "version": version,
             }
 
         @app.get("/api/models/")

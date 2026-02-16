@@ -38,6 +38,7 @@ async function bootstrap() {
     const title = config.title || 'Oxyde Admin';
     document.title = title;
     app.provide('adminTitle', title);
+    app.provide('adminVersion', config.version || '');
 
     app.mount('#app');
 
