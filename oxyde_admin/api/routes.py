@@ -68,12 +68,16 @@ async def update_record(
     model: type[OxydeModel],
     pk: Any,
     data: dict[str, Any],
+    readonly_fields: list[str] | None = None,
 ) -> OxydeModel:
     pk_field = _get_pk_field(model)
     record = await model.objects.get(**{pk_field: pk})
-    for key, value in data.items():
+    blocked = set(readonly_fields or [])
+    blocked.add(pk_field)
+    clean = {k: v for k, v in data.items() if k not in blocked}
+    for key, value in clean.items():
         setattr(record, key, value)
-    await record.save(update_fields=set(data.keys()))
+    await record.save(update_fields=set(clean.keys()))
     return record
 
 

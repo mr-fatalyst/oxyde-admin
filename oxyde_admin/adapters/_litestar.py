@@ -4,6 +4,7 @@ import inspect
 from typing import Any
 
 from litestar import Litestar, Request, get, post, put, delete
+from litestar.params import Parameter
 from litestar.static_files import StaticFilesConfig
 from litestar.exceptions import NotFoundException
 from litestar.openapi import OpenAPIConfig
@@ -187,7 +188,7 @@ class LitestarAdmin(AbstractAdapter):
         async def model_export(
             request: Request,
             model_name: str,
-            format: str = "csv",
+            fmt: str = Parameter(default="csv", query="format"),
             ordering: str | None = None,
             search: str | None = None,
         ) -> Response:
@@ -195,18 +196,27 @@ class LitestarAdmin(AbstractAdapter):
             config = admin._registry.get(model)
             order_list = ordering.split(",") if ordering else None
             filters = admin._extract_filters(model, request.query_params)
+            search_flds = config.search_fields if config else None
+            total_result = await list_records(
+                model,
+                page=1,
+                per_page=1,
+                filters=filters,
+                search=search,
+                search_fields=search_flds,
+            )
             result = await list_records(
                 model,
                 page=1,
-                per_page=10000,
+                per_page=total_result.total,
                 ordering=order_list,
                 filters=filters,
                 search=search,
-                search_fields=config.search_fields if config else None,
+                search_fields=search_flds,
             )
             rows = [item.model_dump() for item in result.items]
             content, media_type, filename = admin._build_export_data(
-                rows, model_name, format
+                rows, model_name, fmt
             )
             return Response(
                 content=content,
@@ -229,7 +239,13 @@ class LitestarAdmin(AbstractAdapter):
         @put("/api/{model_name:str}/{pk:str}/")
         async def model_update(model_name: str, pk: str, data: dict) -> dict:
             model = admin._require_model(model_name)
-            record = await update_record(model, admin._cast_pk(model, pk), data)
+            config = admin._registry.get(model)
+            record = await update_record(
+                model,
+                admin._cast_pk(model, pk),
+                data,
+                readonly_fields=config.readonly_fields if config else None,
+            )
             return record.model_dump()
 
         @delete("/api/{model_name:str}/{pk:str}/", status_code=200)

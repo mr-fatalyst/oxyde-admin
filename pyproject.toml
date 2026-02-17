@@ -26,3 +26,6 @@ dev = [
     "uvicorn",
     "pyjwt",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

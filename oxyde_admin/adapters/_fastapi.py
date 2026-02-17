@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -149,7 +149,7 @@ class FastAPIAdmin(AbstractAdapter):
         async def model_export(
             request: Request,
             model_name: str,
-            format: str = "csv",
+            fmt: str = Query("csv", alias="format"),
             ordering: str | None = None,
             search: str | None = None,
         ):
@@ -157,18 +157,27 @@ class FastAPIAdmin(AbstractAdapter):
             config = self._registry.get(model)
             order_list = ordering.split(",") if ordering else None
             filters = self._extract_filters(model, request.query_params)
+            search_flds = config.search_fields if config else None
+            total_result = await list_records(
+                model,
+                page=1,
+                per_page=1,
+                filters=filters,
+                search=search,
+                search_fields=search_flds,
+            )
             result = await list_records(
                 model,
                 page=1,
-                per_page=10000,
+                per_page=total_result.total,
                 ordering=order_list,
                 filters=filters,
                 search=search,
-                search_fields=config.search_fields if config else None,
+                search_fields=search_flds,
             )
             rows = [item.model_dump() for item in result.items]
             content, media_type, filename = self._build_export_data(
-                rows, model_name, format
+                rows, model_name, fmt
             )
             return Response(
                 content=content,
@@ -192,8 +201,14 @@ class FastAPIAdmin(AbstractAdapter):
         @app.put("/api/{model_name}/{pk}/", response_model=None)
         async def model_update(model_name: str, pk: str, request: Request):
             model = self._require_model(model_name)
+            config = self._registry.get(model)
             data = await request.json()
-            record = await update_record(model, self._cast_pk(model, pk), data)
+            record = await update_record(
+                model,
+                self._cast_pk(model, pk),
+                data,
+                readonly_fields=config.readonly_fields if config else None,
+            )
             return record.model_dump()
 
         @app.delete("/api/{model_name}/{pk}/", response_model=None)

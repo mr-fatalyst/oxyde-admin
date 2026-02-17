@@ -4,6 +4,7 @@ import csv
 import importlib.metadata
 import io
 import json as json_mod
+import uuid
 from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from oxyde.models import OxydeModel
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+EXPORT_WARN_THRESHOLD = 10_000
 
 
 class AbstractAdapter(AdminSite):
@@ -50,6 +52,8 @@ class AbstractAdapter(AdminSite):
             if col.primary_key:
                 if col.python_type is int:
                     return int(pk)
+                if col.python_type is uuid.UUID:
+                    return uuid.UUID(pk)
                 return pk
         return pk
 
@@ -67,6 +71,7 @@ class AbstractAdapter(AdminSite):
             "version": version,
             "auth_enabled": self.auth_check is not None,
             "login_url": self.login_url,
+            "export_warn_threshold": EXPORT_WARN_THRESHOLD,
         }
 
     def _build_models_list(self) -> list[dict]:
@@ -87,6 +92,7 @@ class AbstractAdapter(AdminSite):
                     "column_labels": config.column_labels,
                     "exportable": config.exportable,
                     "search_fields": config.search_fields,
+                    "readonly_fields": config.readonly_fields,
                     "group": config.group,
                     "icon": config.icon,
                 }
