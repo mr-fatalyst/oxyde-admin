@@ -1,6 +1,44 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class Preset(str, Enum):
+    AURA = "Aura"
+    LARA = "Lara"
+    NORA = "Nora"
+
+
+class PrimaryColor(str, Enum):
+    NOIR = "noir"
+    EMERALD = "emerald"
+    GREEN = "green"
+    LIME = "lime"
+    ORANGE = "orange"
+    AMBER = "amber"
+    YELLOW = "yellow"
+    TEAL = "teal"
+    CYAN = "cyan"
+    SKY = "sky"
+    BLUE = "blue"
+    INDIGO = "indigo"
+    VIOLET = "violet"
+    PURPLE = "purple"
+    FUCHSIA = "fuchsia"
+    PINK = "pink"
+    ROSE = "rose"
+
+
+class Surface(str, Enum):
+    SLATE = "slate"
+    GRAY = "gray"
+    ZINC = "zinc"
+    NEUTRAL = "neutral"
+    STONE = "stone"
+    SOHO = "soho"
+    VIVA = "viva"
+    OCEAN = "ocean"
 
 
 @dataclass

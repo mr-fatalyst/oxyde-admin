@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
 from oxyde_admin import AdminSite
+from oxyde_admin.config import Preset, PrimaryColor, Surface
 
 if TYPE_CHECKING:
     from oxyde.models import OxydeModel
@@ -22,9 +23,9 @@ class AbstractAdapter(AdminSite):
         self,
         *,
         title: str = "Oxyde Admin",
-        preset: str = "Aura",
-        primary_color: str = "sky",
-        surface: str = "slate",
+        preset: Preset | str = Preset.AURA,
+        primary_color: PrimaryColor | str = PrimaryColor.SKY,
+        surface: Surface | str = Surface.SLATE,
         auth_check: Callable | None = None,
         login_url: str | None = None,
     ) -> None:

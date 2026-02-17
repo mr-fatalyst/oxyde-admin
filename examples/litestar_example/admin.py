@@ -1,9 +1,15 @@
+from oxyde_admin import Preset, PrimaryColor, Surface
 from oxyde_admin.adapters import LitestarAdmin
 from auth import check_admin
 from models import User, Category, Post, Comment, Tag
 
 admin = LitestarAdmin(
-    title="Mini Blog Admin", auth_check=check_admin, login_url="/auth/login"
+    title="Mini Blog Admin",
+    preset=Preset.LARA,
+    primary_color=PrimaryColor.AMBER,
+    surface=Surface.STONE,
+    auth_check=check_admin,
+    login_url="/auth/login",
 )
 
 admin.register(
