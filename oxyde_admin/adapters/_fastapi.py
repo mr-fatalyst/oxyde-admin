@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import csv
-import importlib.metadata
 import inspect
-import io
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, Response
@@ -13,7 +9,7 @@ from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import AbstractAdapter
+from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
 from oxyde_admin.api.routes import (
     list_records,
     get_record,
@@ -23,8 +19,6 @@ from oxyde_admin.api.routes import (
     get_options,
 )
 from oxyde_admin.schema import build_schema
-
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 class FastAPIAdmin(AbstractAdapter):
@@ -84,33 +78,6 @@ class FastAPIAdmin(AbstractAdapter):
             raise HTTPException(status_code=404, detail="Model not found")
         return model
 
-    @staticmethod
-    def _extract_filters(model, query_params) -> dict | None:
-        """Extract filter values from query params for all model columns."""
-        col_map = {}
-        for name, col in model._db_meta.field_metadata.items():
-            col_map[col.db_column] = (name, col)
-
-        filters = {}
-        for col_name, (field_name, meta) in col_map.items():
-            val = query_params.get(col_name)
-            if val is None or val == "":
-                continue
-            if meta.foreign_key:
-                try:
-                    filters[field_name] = int(val)
-                except ValueError:
-                    filters[field_name] = val
-            elif meta.python_type is bool:
-                filters[field_name] = val.lower() == "true"
-            elif meta.python_type is int:
-                filters[field_name] = int(val)
-            elif meta.python_type is str:
-                filters[f"{field_name}__icontains"] = val
-            else:
-                filters[field_name] = val
-        return filters or None
-
     def _register_exception_handlers(self, app: FastAPI) -> None:
         @app.exception_handler(NotFoundError)
         async def _not_found(request: Request, exc: NotFoundError) -> JSONResponse:
@@ -127,51 +94,15 @@ class FastAPIAdmin(AbstractAdapter):
     def _register_api_routes(self, app: FastAPI) -> None:
         @app.get("/api/config/")
         async def admin_config() -> dict:
-            try:
-                version = importlib.metadata.version("oxyde-admin")
-            except importlib.metadata.PackageNotFoundError:
-                version = "dev"
-            return {
-                "title": self.title,
-                "preset": self.preset,
-                "primary_color": self.primary_color,
-                "surface": self.surface,
-                "version": version,
-                "auth_enabled": self.auth_check is not None,
-                "login_url": self.login_url,
-            }
+            return self._build_config()
 
         @app.get("/api/models/")
         async def models_list() -> list[dict]:
-            result = []
-            for model, config in self._registry.items():
-                model.ensure_field_metadata()
-                meta = model._db_meta
-                result.append(
-                    {
-                        "name": meta.table_name,
-                        "verbose_name": model.__name__,
-                        "field_count": len(meta.field_metadata),
-                        "list_display": config.list_display,
-                        "ordering": config.ordering,
-                        "display_field": config.display_field,
-                        "list_filter": config.list_filter,
-                        "column_labels": config.column_labels,
-                        "exportable": config.exportable,
-                        "search_fields": config.search_fields,
-                        "group": config.group,
-                        "icon": config.icon,
-                    }
-                )
-            return result
+            return self._build_models_list()
 
         @app.get("/api/models/counts/")
         async def models_counts() -> dict[str, int]:
-            result = {}
-            for model in self._registry:
-                count = await model.objects.count()
-                result[model._db_meta.table_name] = count
-            return result
+            return await self._build_models_counts()
 
         @app.get("/api/{model_name}/schema/", response_model=None)
         async def model_schema(model_name: str):
@@ -236,38 +167,13 @@ class FastAPIAdmin(AbstractAdapter):
                 search_fields=config.search_fields if config else None,
             )
             rows = [item.model_dump() for item in result.items]
-
-            if format == "json":
-                import json as json_mod
-
-                content = json_mod.dumps(rows, default=str, ensure_ascii=False)
-                return Response(
-                    content=content,
-                    media_type="application/json",
-                    headers={
-                        "Content-Disposition": f'attachment; filename="{model_name}.json"',
-                    },
-                )
-
-            # CSV
-            if not rows:
-                return Response(
-                    content="",
-                    media_type="text/csv",
-                    headers={
-                        "Content-Disposition": f'attachment; filename="{model_name}.csv"',
-                    },
-                )
-            buf = io.StringIO()
-            writer = csv.DictWriter(buf, fieldnames=rows[0].keys())
-            writer.writeheader()
-            writer.writerows(rows)
+            content, media_type, filename = self._build_export_data(
+                rows, model_name, format
+            )
             return Response(
-                content=buf.getvalue(),
-                media_type="text/csv",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{model_name}.csv"',
-                },
+                content=content,
+                media_type=media_type,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
         @app.get("/api/{model_name}/{pk}/", response_model=None)

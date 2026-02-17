@@ -1,4 +1,4 @@
-.PHONY: install install-front dev-front build run-fastapi fixture-fastapi
+.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar
 
 VENV = .venv/bin
 
@@ -19,3 +19,9 @@ run-fastapi:
 
 fixture-fastapi:
 	cd examples/fastapi_example && ../../$(VENV)/python fixture.py
+
+run-litestar:
+	cd examples/litestar_example && ../../$(VENV)/uvicorn app:app --reload --port 8000
+
+fixture-litestar:
+	cd examples/litestar_example && ../../$(VENV)/python fixture.py
