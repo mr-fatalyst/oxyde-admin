@@ -21,6 +21,7 @@ const originalData = ref(null);
 const errors = ref({});
 const fkOptions = ref({});  // { fieldName: [{value, label}] }
 const columnLabels = ref({});
+const readonlyFields = ref([]);
 const loading = ref(false);
 const saving = ref(false);
 const deleting = ref(false);
@@ -67,9 +68,10 @@ function extractFkMap(schemaData) {
     return map;
 }
 
-function buildFields(schemaData, labels) {
+function buildFields(schemaData, labels, roFields) {
     const props = schemaData.properties || {};
     const required = new Set(schemaData.required || []);
+    const roSet = new Set(roFields || []);
     const fkMap = extractFkMap(schemaData);
     const result = [];
 
@@ -83,7 +85,7 @@ function buildFields(schemaData, labels) {
             label: (labels && labels[name]) || prop.title || name,
             type: resolveType(prop),
             isPk: !!prop['x-db-primary-key'],
-            isReadonly: !!prop['x-db-readonly'],
+            isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
             isRequired: required.has(name),
             default: prop.default ?? null,
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
@@ -159,7 +161,8 @@ async function loadSchema() {
     const models = await modelsRes.json();
     const meta = models.find((m) => m.name === modelName.value);
     columnLabels.value = meta?.column_labels || {};
-    fields.value = buildFields(schema.value, columnLabels.value);
+    readonlyFields.value = meta?.readonly_fields || [];
+    fields.value = buildFields(schema.value, columnLabels.value, readonlyFields.value);
 }
 
 async function loadFkOptions() {

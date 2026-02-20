@@ -1,10 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
 
 const route = useRoute();
 const router = useRouter();
+const confirm = useConfirm();
 
 const modelName = ref(route.params.model);
 const verboseName = ref('');
@@ -27,6 +29,7 @@ const perPage = ref(25);
 const sortField = ref(null);
 const sortOrder = ref(null);
 const searchQuery = ref('');
+const exportWarnThreshold = ref(null);
 let searchTimeout = null;
 
 function buildColumnProps(schemaData) {
@@ -77,6 +80,12 @@ function formatDatetime(val) {
 }
 
 async function loadMeta() {
+    const configRes = await api('/api/config/');
+    const config = await configRes.json();
+    if (config.export_warn_threshold) {
+        exportWarnThreshold.value = config.export_warn_threshold;
+    }
+
     const res = await api('/api/models/');
     const models = await res.json();
     const meta = models.find((m) => m.name === modelName.value);
@@ -206,7 +215,7 @@ function buildExportUrl(format) {
     return url;
 }
 
-async function exportData(format) {
+async function doExport(format) {
     const url = buildExportUrl(format);
     const res = await api(url);
     const blob = await res.blob();
@@ -215,6 +224,22 @@ async function exportData(format) {
     a.download = `${modelName.value}.${format}`;
     a.click();
     URL.revokeObjectURL(a.href);
+}
+
+function exportData(format) {
+    if (exportWarnThreshold.value && totalRecords.value > exportWarnThreshold.value) {
+        confirm.require({
+            message: `You are about to export ${totalRecords.value.toLocaleString()} records. This may take a while. Continue?`,
+            header: 'Large Export',
+            icon: 'pi pi-exclamation-triangle',
+            rejectLabel: 'Cancel',
+            rejectProps: { severity: 'secondary', text: true },
+            acceptLabel: 'Export',
+            accept: () => doExport(format),
+        });
+    } else {
+        doExport(format);
+    }
 }
 
 const exportItems = [
@@ -369,5 +394,7 @@ onMounted(async () => {
                 </template>
             </Column>
         </DataTable>
+
+        <ConfirmDialog />
     </div>
 </template>
