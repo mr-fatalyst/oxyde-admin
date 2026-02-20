@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from oxyde_admin.adapters.base import AbstractAdapter
 
 
@@ -38,6 +40,12 @@ class TestExtractFilters:
         result = AbstractAdapter._extract_filters(MockUser, {"name": "alice"})
 
         assert result == {"name__icontains": "alice"}
+
+    def test_extract_filters_fk_uuid(self, MockUUIDFKModel):
+        raw = "550e8400-e29b-41d4-a716-446655440000"
+        result = AbstractAdapter._extract_filters(MockUUIDFKModel, {"ref_id": raw})
+
+        assert result == {"ref_id": uuid.UUID(raw)}
 
     def test_extract_filters_skips_empty(self, MockUser):
         result = AbstractAdapter._extract_filters(MockUser, {"name": "", "email": None})

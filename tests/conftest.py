@@ -188,6 +188,24 @@ def MockStrPKModel():
     return _make_mock_model("MockStrPK", "str_pks", dict(_STR_PK_FIELDS), {})
 
 
+# ── Mock model with UUID FK ───────────────────────────────────────────
+
+_UUID_FK_FIELDS = {
+    "id": _ColumnMeta("id", primary_key=True, python_type=int, db_type="INTEGER"),
+    "ref_id": _ColumnMeta(
+        "ref_id",
+        python_type=uuid.UUID,
+        foreign_key=_make_fk("MockUUID", "id"),
+        db_type="UUID",
+    ),
+}
+
+
+@pytest.fixture()
+def MockUUIDFKModel():
+    return _make_mock_model("MockUUIDFK", "uuid_fk", dict(_UUID_FK_FIELDS), {})
+
+
 # ── Mock model with no PK ─────────────────────────────────────────────
 
 _NO_PK_FIELDS = {

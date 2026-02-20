@@ -271,8 +271,8 @@ class AbstractAdapter(AdminSite):
                 continue
             if meta.foreign_key:
                 try:
-                    filters[field_name] = int(val)
-                except ValueError:
+                    filters[field_name] = meta.python_type(val)
+                except (ValueError, TypeError):
                     filters[field_name] = val
             elif meta.python_type is bool:
                 filters[field_name] = val.lower() == "true"
