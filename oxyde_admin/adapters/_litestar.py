@@ -6,23 +6,13 @@ from typing import Any
 from litestar import Litestar, Request, get, post, put, delete
 from litestar.params import Parameter
 from litestar.static_files import StaticFilesConfig
-from litestar.exceptions import NotFoundException
 from litestar.openapi import OpenAPIConfig
 from litestar.response import Response, File
 from litestar.types import ASGIApp, Receive, Scope, Send
 from pydantic import ValidationError
 
 from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
-from oxyde_admin.api.routes import (
-    list_records,
-    get_record,
-    create_record,
-    update_record,
-    delete_record,
-    get_options,
-)
-from oxyde_admin.schema import build_schema
+from oxyde_admin.adapters.base import AbstractAdapter, ModelNotFoundError, STATIC_DIR
 
 
 class LitestarAdmin(AbstractAdapter):
@@ -46,9 +36,10 @@ class LitestarAdmin(AbstractAdapter):
             middleware.append(self._create_auth_middleware())
 
         exception_handlers: dict[type[Exception], Any] = {
-            NotFoundError: self._handle_not_found,
-            IntegrityError: self._handle_integrity,
-            ValidationError: self._handle_validation,
+            ModelNotFoundError: self._exc_model_not_found,
+            NotFoundError: self._exc_not_found,
+            IntegrityError: self._exc_integrity,
+            ValidationError: self._exc_validation,
         }
 
         static_configs = []
@@ -67,6 +58,10 @@ class LitestarAdmin(AbstractAdapter):
                 title="Oxyde Admin", version="0.1.0", path=None
             ),
         )
+
+    # ------------------------------------------------------------------
+    # Auth middleware
+    # ------------------------------------------------------------------
 
     def _create_auth_middleware(self):
         check = self.auth_check
@@ -110,23 +105,31 @@ class LitestarAdmin(AbstractAdapter):
 
         return middleware_factory
 
-    def _require_model(self, model_name: str):
-        model = self._resolve_model(model_name)
-        if model is None:
-            raise NotFoundException(detail="Model not found")
-        return model
+    # ------------------------------------------------------------------
+    # Exception handlers
+    # ------------------------------------------------------------------
 
     @staticmethod
-    async def _handle_not_found(request: Request, exc: NotFoundError) -> Response:
+    async def _exc_model_not_found(
+        request: Request, exc: ModelNotFoundError
+    ) -> Response:
         return Response(content={"detail": str(exc)}, status_code=404)
 
     @staticmethod
-    async def _handle_integrity(request: Request, exc: IntegrityError) -> Response:
+    async def _exc_not_found(request: Request, exc: NotFoundError) -> Response:
+        return Response(content={"detail": str(exc)}, status_code=404)
+
+    @staticmethod
+    async def _exc_integrity(request: Request, exc: IntegrityError) -> Response:
         return Response(content={"detail": str(exc)}, status_code=409)
 
     @staticmethod
-    async def _handle_validation(request: Request, exc: ValidationError) -> Response:
+    async def _exc_validation(request: Request, exc: ValidationError) -> Response:
         return Response(content={"detail": exc.errors()}, status_code=422)
+
+    # ------------------------------------------------------------------
+    # Route handlers
+    # ------------------------------------------------------------------
 
     def _build_route_handlers(self) -> list:
         admin = self
@@ -145,8 +148,7 @@ class LitestarAdmin(AbstractAdapter):
 
         @get("/api/{model_name:str}/schema/")
         async def model_schema(model_name: str) -> dict:
-            model = admin._require_model(model_name)
-            return build_schema(model)
+            return await admin._handle_schema(model_name)
 
         @get("/api/{model_name:str}/")
         async def model_list(
@@ -157,32 +159,18 @@ class LitestarAdmin(AbstractAdapter):
             ordering: str | None = None,
             search: str | None = None,
         ) -> dict:
-            model = admin._require_model(model_name)
-            config = admin._registry.get(model)
-            order_list = ordering.split(",") if ordering else None
-            filters = admin._extract_filters(model, request.query_params)
-            result = await list_records(
-                model,
-                page=page,
-                per_page=per_page,
-                ordering=order_list,
-                filters=filters,
-                search=search,
-                search_fields=config.search_fields if config else None,
+            return await admin._handle_list(
+                model_name,
+                request.query_params,
+                page,
+                per_page,
+                ordering,
+                search,
             )
-            return {
-                "items": [item.model_dump() for item in result.items],
-                "total": result.total,
-                "page": result.page,
-                "per_page": result.per_page,
-            }
 
         @get("/api/{model_name:str}/options/")
         async def model_options(model_name: str) -> list:
-            model = admin._require_model(model_name)
-            config = admin._registry.get(model)
-            display = config.display_field if config else None
-            return await get_options(model, display)
+            return await admin._handle_options(model_name)
 
         @get("/api/{model_name:str}/export/")
         async def model_export(
@@ -192,31 +180,12 @@ class LitestarAdmin(AbstractAdapter):
             ordering: str | None = None,
             search: str | None = None,
         ) -> Response:
-            model = admin._require_model(model_name)
-            config = admin._registry.get(model)
-            order_list = ordering.split(",") if ordering else None
-            filters = admin._extract_filters(model, request.query_params)
-            search_flds = config.search_fields if config else None
-            total_result = await list_records(
-                model,
-                page=1,
-                per_page=1,
-                filters=filters,
-                search=search,
-                search_fields=search_flds,
-            )
-            result = await list_records(
-                model,
-                page=1,
-                per_page=total_result.total,
-                ordering=order_list,
-                filters=filters,
-                search=search,
-                search_fields=search_flds,
-            )
-            rows = [item.model_dump() for item in result.items]
-            content, media_type, filename = admin._build_export_data(
-                rows, model_name, fmt
+            content, media_type, filename = await admin._handle_export(
+                model_name,
+                request.query_params,
+                fmt,
+                ordering,
+                search,
             )
             return Response(
                 content=content,
@@ -226,35 +195,21 @@ class LitestarAdmin(AbstractAdapter):
 
         @get("/api/{model_name:str}/{pk:str}/")
         async def model_get(model_name: str, pk: str) -> dict:
-            model = admin._require_model(model_name)
-            record = await get_record(model, pk)
-            return record.model_dump()
+            return await admin._handle_get(model_name, pk)
 
         @post("/api/{model_name:str}/", status_code=201)
         async def model_create(model_name: str, data: dict) -> dict:
-            model = admin._require_model(model_name)
-            record = await create_record(model, data)
-            return record.model_dump()
+            return await admin._handle_create(model_name, data)
 
         @put("/api/{model_name:str}/{pk:str}/")
         async def model_update(model_name: str, pk: str, data: dict) -> dict:
-            model = admin._require_model(model_name)
-            config = admin._registry.get(model)
-            record = await update_record(
-                model,
-                pk,
-                data,
-                readonly_fields=config.readonly_fields if config else None,
-            )
-            return record.model_dump()
+            return await admin._handle_update(model_name, pk, data)
 
         @delete("/api/{model_name:str}/{pk:str}/", status_code=200)
         async def model_delete(model_name: str, pk: str) -> dict:
-            model = admin._require_model(model_name)
-            count = await delete_record(model, pk)
-            return {"deleted": count}
+            return await admin._handle_delete(model_name, pk)
 
-        index_html = STATIC_DIR / "index.html"
+        # -- SPA catch-all -------------------------------------------------
 
         def _get_mount_prefix(request: Request) -> str:
             """Derive mount prefix from scope.
@@ -278,19 +233,12 @@ class LitestarAdmin(AbstractAdapter):
             return ""
 
         def _serve_spa(request: Request, path: str = "") -> Response:
-            path = path.lstrip("/")
-            if path:
-                file_path = (STATIC_DIR / path).resolve()
-                if file_path.is_relative_to(STATIC_DIR) and file_path.is_file():
-                    return File(path=file_path)
-            if index_html.exists():
-                prefix = _get_mount_prefix(request)
-                base_href = prefix.rstrip("/") + "/"
-                html = index_html.read_text().replace(
-                    "<head>",
-                    f'<head><base href="{base_href}">',
-                    1,
-                )
+            static_file = admin._resolve_static_file(path.lstrip("/"))
+            if static_file is not None:
+                return File(path=static_file)
+            prefix = _get_mount_prefix(request)
+            html = admin._render_index_html(prefix)
+            if html is not None:
                 return Response(content=html, media_type="text/html")
             return Response(content={"detail": "Frontend not built"}, status_code=404)
 

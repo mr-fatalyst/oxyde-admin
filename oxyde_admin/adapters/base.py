@@ -5,16 +5,33 @@ import importlib.metadata
 import io
 import json as json_mod
 from pathlib import Path
-from typing import Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 from oxyde_admin import AdminSite
 from oxyde_admin.config import Preset, PrimaryColor, Surface
+from oxyde_admin.api.routes import (
+    list_records,
+    get_record,
+    create_record,
+    update_record,
+    delete_record,
+    get_options,
+)
+from oxyde_admin.schema import build_schema
 
 if TYPE_CHECKING:
     from oxyde.models import OxydeModel
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 EXPORT_WARN_THRESHOLD = 10_000
+
+
+class ModelNotFoundError(Exception):
+    """Raised when a model is not found in the registry."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"Model '{name}' not found")
 
 
 class AbstractAdapter(AdminSite):
@@ -44,6 +61,151 @@ class AbstractAdapter(AdminSite):
             if model._db_meta.table_name == name:
                 return model
         return None
+
+    def _require_model(self, name: str) -> type[OxydeModel]:
+        """Find a registered model by table name or raise ModelNotFoundError."""
+        model = self._resolve_model(name)
+        if model is None:
+            raise ModelNotFoundError(name)
+        return model
+
+    # ------------------------------------------------------------------
+    # Handler methods. Framework-agnostic business logic
+    # ------------------------------------------------------------------
+
+    async def _handle_schema(self, model_name: str) -> dict[str, Any]:
+        model = self._require_model(model_name)
+        return build_schema(model)
+
+    async def _handle_list(
+        self,
+        model_name: str,
+        query_params,
+        page: int = 1,
+        per_page: int = 25,
+        ordering: str | None = None,
+        search: str | None = None,
+    ) -> dict[str, Any]:
+        model = self._require_model(model_name)
+        config = self._registry.get(model)
+        order_list = ordering.split(",") if ordering else None
+        filters = self._extract_filters(model, query_params)
+        result = await list_records(
+            model,
+            page=page,
+            per_page=per_page,
+            ordering=order_list,
+            filters=filters,
+            search=search,
+            search_fields=config.search_fields if config else None,
+        )
+        return {
+            "items": [item.model_dump() for item in result.items],
+            "total": result.total,
+            "page": result.page,
+            "per_page": result.per_page,
+        }
+
+    async def _handle_options(self, model_name: str) -> list[dict[str, Any]]:
+        model = self._require_model(model_name)
+        config = self._registry.get(model)
+        display = config.display_field if config else None
+        return await get_options(model, display)
+
+    async def _handle_export(
+        self,
+        model_name: str,
+        query_params,
+        fmt: str = "csv",
+        ordering: str | None = None,
+        search: str | None = None,
+    ) -> tuple[str, str, str]:
+        """Returns ``(content, media_type, filename)``."""
+        model = self._require_model(model_name)
+        config = self._registry.get(model)
+        order_list = ordering.split(",") if ordering else None
+        filters = self._extract_filters(model, query_params)
+        search_flds = config.search_fields if config else None
+        total_result = await list_records(
+            model,
+            page=1,
+            per_page=1,
+            filters=filters,
+            search=search,
+            search_fields=search_flds,
+        )
+        result = await list_records(
+            model,
+            page=1,
+            per_page=total_result.total,
+            ordering=order_list,
+            filters=filters,
+            search=search,
+            search_fields=search_flds,
+        )
+        rows = [item.model_dump() for item in result.items]
+        return self._build_export_data(rows, model_name, fmt)
+
+    async def _handle_get(self, model_name: str, pk: str) -> dict[str, Any]:
+        model = self._require_model(model_name)
+        record = await get_record(model, pk)
+        return record.model_dump()
+
+    async def _handle_create(
+        self, model_name: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        model = self._require_model(model_name)
+        record = await create_record(model, data)
+        return record.model_dump()
+
+    async def _handle_update(
+        self, model_name: str, pk: str, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        model = self._require_model(model_name)
+        config = self._registry.get(model)
+        record = await update_record(
+            model,
+            pk,
+            data,
+            readonly_fields=config.readonly_fields if config else None,
+        )
+        return record.model_dump()
+
+    async def _handle_delete(self, model_name: str, pk: str) -> dict[str, Any]:
+        model = self._require_model(model_name)
+        count = await delete_record(model, pk)
+        return {"deleted": count}
+
+    # ------------------------------------------------------------------
+    # SPA serving helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_static_file(path: str) -> Path | None:
+        """Resolve a URL path to a static file with traversal protection."""
+        if not path:
+            return None
+        file_path = (STATIC_DIR / path).resolve()
+        if file_path.is_relative_to(STATIC_DIR) and file_path.is_file():
+            return file_path
+        return None
+
+    @staticmethod
+    def _render_index_html(mount_prefix: str) -> str | None:
+        """Return *index.html* with ``<base href>`` injected, or *None*."""
+        index_html = STATIC_DIR / "index.html"
+        if not index_html.exists():
+            return None
+        base_href = mount_prefix.rstrip("/") + "/"
+        return index_html.read_text().replace(
+            "<head>",
+            f'<head><base href="{base_href}">',
+            1,
+        )
+
+    # ------------------------------------------------------------------
+    # Config / models list / counts
+    # ------------------------------------------------------------------
 
     def _build_config(self) -> dict:
         """Build config endpoint data."""

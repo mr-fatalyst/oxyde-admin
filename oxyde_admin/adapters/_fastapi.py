@@ -2,23 +2,14 @@ from __future__ import annotations
 
 import inspect
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
-from oxyde_admin.api.routes import (
-    list_records,
-    get_record,
-    create_record,
-    update_record,
-    delete_record,
-    get_options,
-)
-from oxyde_admin.schema import build_schema
+from oxyde_admin.adapters.base import AbstractAdapter, ModelNotFoundError, STATIC_DIR
 
 
 class FastAPIAdmin(AbstractAdapter):
@@ -72,13 +63,13 @@ class FastAPIAdmin(AbstractAdapter):
 
         app.add_middleware(BaseHTTPMiddleware, dispatch=auth_middleware)
 
-    def _require_model(self, model_name: str):
-        model = self._resolve_model(model_name)
-        if model is None:
-            raise HTTPException(status_code=404, detail="Model not found")
-        return model
-
     def _register_exception_handlers(self, app: FastAPI) -> None:
+        @app.exception_handler(ModelNotFoundError)
+        async def _model_not_found(
+            request: Request, exc: ModelNotFoundError
+        ) -> JSONResponse:
+            return JSONResponse({"detail": str(exc)}, status_code=404)
+
         @app.exception_handler(NotFoundError)
         async def _not_found(request: Request, exc: NotFoundError) -> JSONResponse:
             return JSONResponse({"detail": str(exc)}, status_code=404)
@@ -106,8 +97,7 @@ class FastAPIAdmin(AbstractAdapter):
 
         @app.get("/api/{model_name}/schema/", response_model=None)
         async def model_schema(model_name: str):
-            model = self._require_model(model_name)
-            return build_schema(model)
+            return await self._handle_schema(model_name)
 
         @app.get("/api/{model_name}/", response_model=None)
         async def model_list(
@@ -118,32 +108,18 @@ class FastAPIAdmin(AbstractAdapter):
             ordering: str | None = None,
             search: str | None = None,
         ):
-            model = self._require_model(model_name)
-            config = self._registry.get(model)
-            order_list = ordering.split(",") if ordering else None
-            filters = self._extract_filters(model, request.query_params)
-            result = await list_records(
-                model,
-                page=page,
-                per_page=per_page,
-                ordering=order_list,
-                filters=filters,
-                search=search,
-                search_fields=config.search_fields if config else None,
+            return await self._handle_list(
+                model_name,
+                request.query_params,
+                page,
+                per_page,
+                ordering,
+                search,
             )
-            return {
-                "items": [item.model_dump() for item in result.items],
-                "total": result.total,
-                "page": result.page,
-                "per_page": result.per_page,
-            }
 
         @app.get("/api/{model_name}/options/", response_model=None)
         async def model_options(model_name: str):
-            model = self._require_model(model_name)
-            config = self._registry.get(model)
-            display = config.display_field if config else None
-            return await get_options(model, display)
+            return await self._handle_options(model_name)
 
         @app.get("/api/{model_name}/export/", response_model=None)
         async def model_export(
@@ -153,31 +129,12 @@ class FastAPIAdmin(AbstractAdapter):
             ordering: str | None = None,
             search: str | None = None,
         ):
-            model = self._require_model(model_name)
-            config = self._registry.get(model)
-            order_list = ordering.split(",") if ordering else None
-            filters = self._extract_filters(model, request.query_params)
-            search_flds = config.search_fields if config else None
-            total_result = await list_records(
-                model,
-                page=1,
-                per_page=1,
-                filters=filters,
-                search=search,
-                search_fields=search_flds,
-            )
-            result = await list_records(
-                model,
-                page=1,
-                per_page=total_result.total,
-                ordering=order_list,
-                filters=filters,
-                search=search,
-                search_fields=search_flds,
-            )
-            rows = [item.model_dump() for item in result.items]
-            content, media_type, filename = self._build_export_data(
-                rows, model_name, fmt
+            content, media_type, filename = await self._handle_export(
+                model_name,
+                request.query_params,
+                fmt,
+                ordering,
+                search,
             )
             return Response(
                 content=content,
@@ -187,56 +144,34 @@ class FastAPIAdmin(AbstractAdapter):
 
         @app.get("/api/{model_name}/{pk}/", response_model=None)
         async def model_get(model_name: str, pk: str):
-            model = self._require_model(model_name)
-            record = await get_record(model, pk)
-            return record.model_dump()
+            return await self._handle_get(model_name, pk)
 
         @app.post("/api/{model_name}/", status_code=201, response_model=None)
         async def model_create(model_name: str, request: Request):
-            model = self._require_model(model_name)
             data = await request.json()
-            record = await create_record(model, data)
-            return record.model_dump()
+            return await self._handle_create(model_name, data)
 
         @app.put("/api/{model_name}/{pk}/", response_model=None)
         async def model_update(model_name: str, pk: str, request: Request):
-            model = self._require_model(model_name)
-            config = self._registry.get(model)
             data = await request.json()
-            record = await update_record(
-                model,
-                pk,
-                data,
-                readonly_fields=config.readonly_fields if config else None,
-            )
-            return record.model_dump()
+            return await self._handle_update(model_name, pk, data)
 
         @app.delete("/api/{model_name}/{pk}/", response_model=None)
         async def model_delete(model_name: str, pk: str):
-            model = self._require_model(model_name)
-            count = await delete_record(model, pk)
-            return {"deleted": count}
+            return await self._handle_delete(model_name, pk)
 
     def _register_static(self, app: FastAPI) -> None:
         assets_dir = STATIC_DIR / "assets"
         if assets_dir.is_dir():
             app.mount("/assets", StaticFiles(directory=assets_dir), name="static")
 
-        index_html = STATIC_DIR / "index.html"
-
         @app.get("/{path:path}", response_model=None)
         async def catch_all(request: Request, path: str):
-            if path:
-                file_path = (STATIC_DIR / path).resolve()
-                if file_path.is_relative_to(STATIC_DIR) and file_path.is_file():
-                    return FileResponse(file_path)
-            if index_html.exists():
-                root = request.scope.get("root_path", "")
-                base_href = root.rstrip("/") + "/"
-                html = index_html.read_text().replace(
-                    "<head>",
-                    f'<head><base href="{base_href}">',
-                    1,
-                )
+            static_file = self._resolve_static_file(path)
+            if static_file is not None:
+                return FileResponse(static_file)
+            root = request.scope.get("root_path", "")
+            html = self._render_index_html(root)
+            if html is not None:
                 return HTMLResponse(html)
             return JSONResponse({"detail": "Frontend not built"}, status_code=404)
