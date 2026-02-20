@@ -53,8 +53,8 @@ async def get_record(
     model: type[OxydeModel],
     pk: Any,
 ) -> OxydeModel:
-    pk_field = _get_pk_field(model)
-    return await model.objects.get(**{pk_field: pk})
+    name, pk_type = _get_pk_field(model)
+    return await model.objects.get(**{name: pk_type(pk)})
 
 
 async def create_record(
@@ -70,10 +70,10 @@ async def update_record(
     data: dict[str, Any],
     readonly_fields: list[str] | None = None,
 ) -> OxydeModel:
-    pk_field = _get_pk_field(model)
-    record = await model.objects.get(**{pk_field: pk})
+    name, pk_type = _get_pk_field(model)
+    record = await model.objects.get(**{name: pk_type(pk)})
     blocked = set(readonly_fields or [])
-    blocked.add(pk_field)
+    blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
     for key, value in clean.items():
         setattr(record, key, value)
@@ -85,8 +85,8 @@ async def delete_record(
     model: type[OxydeModel],
     pk: Any,
 ) -> int:
-    pk_field = _get_pk_field(model)
-    return await model.objects.filter(**{pk_field: pk}).delete()
+    name, pk_type = _get_pk_field(model)
+    return await model.objects.filter(**{name: pk_type(pk)}).delete()
 
 
 async def get_options(
@@ -94,7 +94,7 @@ async def get_options(
     display_field: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return [{value: pk, label: display}] for FK dropdowns."""
-    pk_field = _get_pk_field(model)
+    pk_field, _ = _get_pk_field(model)
     label_field = display_field or _guess_display_field(model)
     items = await model.objects.all()
     return [
@@ -103,10 +103,10 @@ async def get_options(
     ]
 
 
-def _get_pk_field(model: type[OxydeModel]) -> str:
+def _get_pk_field(model: type[OxydeModel]) -> tuple[str, type]:
     for name, col in model._db_meta.field_metadata.items():
         if col.primary_key:
-            return name
+            return name, col.python_type
     raise ValueError(f"No primary key found for {model.__name__}")
 
 
@@ -115,4 +115,4 @@ def _guess_display_field(model: type[OxydeModel]) -> str:
     for name, col in model._db_meta.field_metadata.items():
         if col.python_type is str:
             return name
-    return _get_pk_field(model)
+    return _get_pk_field(model)[0]

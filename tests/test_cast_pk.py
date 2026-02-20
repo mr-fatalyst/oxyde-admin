@@ -2,34 +2,34 @@ from __future__ import annotations
 
 import uuid
 
-from conftest import ConcreteAdapter
+import pytest
+
+from oxyde_admin.api.routes import _get_pk_field
 
 
-class TestCastPK:
-    def setup_method(self):
-        self.adapter = ConcreteAdapter()
+class TestGetPkField:
+    def test_int_pk(self, MockUser):
+        name, pk_type = _get_pk_field(MockUser)
 
-    def test_cast_pk_int(self, MockUser):
-        result = self.adapter._cast_pk(MockUser, "42")
+        assert name == "id"
+        assert pk_type is int
+        assert pk_type("42") == 42
 
-        assert result == 42
-        assert isinstance(result, int)
-
-    def test_cast_pk_uuid(self, MockUUIDModel):
+    def test_uuid_pk(self, MockUUIDModel):
+        name, pk_type = _get_pk_field(MockUUIDModel)
         raw = "550e8400-e29b-41d4-a716-446655440000"
-        result = self.adapter._cast_pk(MockUUIDModel, raw)
 
-        assert result == uuid.UUID(raw)
-        assert isinstance(result, uuid.UUID)
+        assert name == "id"
+        assert pk_type is uuid.UUID
+        assert pk_type(raw) == uuid.UUID(raw)
 
-    def test_cast_pk_string(self, MockStrPKModel):
-        result = self.adapter._cast_pk(MockStrPKModel, "my-slug")
+    def test_string_pk(self, MockStrPKModel):
+        name, pk_type = _get_pk_field(MockStrPKModel)
 
-        assert result == "my-slug"
-        assert isinstance(result, str)
+        assert name == "slug"
+        assert pk_type is str
+        assert pk_type("my-slug") == "my-slug"
 
-    def test_cast_pk_no_pk_field(self, MockNoPKModel):
-        result = self.adapter._cast_pk(MockNoPKModel, "fallback")
-
-        assert result == "fallback"
-        assert isinstance(result, str)
+    def test_no_pk_field(self, MockNoPKModel):
+        with pytest.raises(ValueError, match="No primary key"):
+            _get_pk_field(MockNoPKModel)

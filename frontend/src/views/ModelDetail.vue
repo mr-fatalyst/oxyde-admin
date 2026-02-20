@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
+import { findPk } from '@/utils.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -221,7 +222,7 @@ async function save(andContinue = false) {
         toast.add({ severity: 'success', summary: 'Saved', detail: `${schema.value.title} saved`, life: 3000 });
 
         if (isCreate.value) {
-            const newPk = findPk(record);
+            const newPk = findPk(record, fields.value);
             if (newPk !== null) {
                 if (andContinue) {
                     router.replace(`/${modelName.value}/${newPk}`);
@@ -266,13 +267,6 @@ async function deleteRecord() {
     } finally {
         deleting.value = false;
     }
-}
-
-function findPk(record) {
-    for (const f of fields.value) {
-        if (f.isPk) return record[f.name];
-    }
-    return record.id ?? null;
 }
 
 function parseValidationErrors(data) {
@@ -368,9 +362,7 @@ async function dlgSave() {
         const record = await res.json();
         toast.add({ severity: 'success', summary: 'Created', detail: `${dlgSchema.value.title} created`, life: 3000 });
 
-        // Find PK of new record
-        const pkField = dlgFields.value.find((f) => f.isPk);
-        const newPk = pkField ? record[pkField.name] : record.id;
+        const newPk = findPk(record, dlgFields.value);
 
         // Refresh options for the parent FK field and select the new record
         const parentField = dlgField.value;

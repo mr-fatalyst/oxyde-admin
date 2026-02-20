@@ -4,9 +4,8 @@ import csv
 import importlib.metadata
 import io
 import json as json_mod
-import uuid
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING
 
 from oxyde_admin import AdminSite
 from oxyde_admin.config import Preset, PrimaryColor, Surface
@@ -45,17 +44,6 @@ class AbstractAdapter(AdminSite):
             if model._db_meta.table_name == name:
                 return model
         return None
-
-    def _cast_pk(self, model: type[OxydeModel], pk: str) -> Any:
-        """Cast a PK string from URL to the field's Python type."""
-        for col in model._db_meta.field_metadata.values():
-            if col.primary_key:
-                if col.python_type is int:
-                    return int(pk)
-                if col.python_type is uuid.UUID:
-                    return uuid.UUID(pk)
-                return pk
-        return pk
 
     def _build_config(self) -> dict:
         """Build config endpoint data."""

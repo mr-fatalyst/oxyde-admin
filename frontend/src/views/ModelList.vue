@@ -23,6 +23,7 @@ const exportable = ref(false);
 const columnLabels = ref({});
 const filters = ref({});       // PrimeVue filter state: { col: { value, matchMode } }
 const filterMeta = ref({});    // { col: { type, options? } }
+const pkFieldName = ref(null);
 
 const page = ref(1);
 const perPage = ref(25);
@@ -101,6 +102,13 @@ async function loadMeta() {
     const schema = await schemaRes.json();
 
     colProps.value = buildColumnProps(schema);
+
+    for (const [col, prop] of Object.entries(colProps.value)) {
+        if (prop['x-db-primary-key']) {
+            pkFieldName.value = col;
+            break;
+        }
+    }
 
     if (meta.list_display && meta.list_display.length > 0) {
         columns.value = meta.list_display;
@@ -261,16 +269,9 @@ function onSort(event) {
 
 function onRowClick(event) {
     const record = event.data;
-    const pk = findPk(record);
-    if (pk !== null) {
-        router.push(`/${modelName.value}/${pk}`);
+    if (pkFieldName.value) {
+        router.push(`/${modelName.value}/${record[pkFieldName.value]}`);
     }
-}
-
-function findPk(record) {
-    if ('id' in record) return record.id;
-    const keys = Object.keys(record);
-    return keys.length > 0 ? record[keys[0]] : null;
 }
 
 onMounted(async () => {

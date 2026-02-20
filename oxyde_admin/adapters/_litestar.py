@@ -227,7 +227,7 @@ class LitestarAdmin(AbstractAdapter):
         @get("/api/{model_name:str}/{pk:str}/")
         async def model_get(model_name: str, pk: str) -> dict:
             model = admin._require_model(model_name)
-            record = await get_record(model, admin._cast_pk(model, pk))
+            record = await get_record(model, pk)
             return record.model_dump()
 
         @post("/api/{model_name:str}/", status_code=201)
@@ -242,7 +242,7 @@ class LitestarAdmin(AbstractAdapter):
             config = admin._registry.get(model)
             record = await update_record(
                 model,
-                admin._cast_pk(model, pk),
+                pk,
                 data,
                 readonly_fields=config.readonly_fields if config else None,
             )
@@ -251,7 +251,7 @@ class LitestarAdmin(AbstractAdapter):
         @delete("/api/{model_name:str}/{pk:str}/", status_code=200)
         async def model_delete(model_name: str, pk: str) -> dict:
             model = admin._require_model(model_name)
-            count = await delete_record(model, admin._cast_pk(model, pk))
+            count = await delete_record(model, pk)
             return {"deleted": count}
 
         index_html = STATIC_DIR / "index.html"
