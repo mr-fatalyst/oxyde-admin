@@ -9,7 +9,12 @@ from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import AbstractAdapter, ModelNotFoundError, STATIC_DIR
+from oxyde_admin.adapters.base import (
+    AbstractAdapter,
+    ExportNotAllowedError,
+    ModelNotFoundError,
+    STATIC_DIR,
+)
 
 
 class FastAPIAdmin(AbstractAdapter):
@@ -64,6 +69,12 @@ class FastAPIAdmin(AbstractAdapter):
         app.add_middleware(BaseHTTPMiddleware, dispatch=auth_middleware)
 
     def _register_exception_handlers(self, app: FastAPI) -> None:
+        @app.exception_handler(ExportNotAllowedError)
+        async def _export_not_allowed(
+            request: Request, exc: ExportNotAllowedError
+        ) -> JSONResponse:
+            return JSONResponse({"detail": str(exc)}, status_code=403)
+
         @app.exception_handler(ModelNotFoundError)
         async def _model_not_found(
             request: Request, exc: ModelNotFoundError

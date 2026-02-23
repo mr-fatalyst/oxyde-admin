@@ -34,6 +34,14 @@ class ModelNotFoundError(Exception):
         super().__init__(f"Model '{name}' not found")
 
 
+class ExportNotAllowedError(Exception):
+    """Raised when export is disabled for a model."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        super().__init__(f"Export is not allowed for '{name}'")
+
+
 class AbstractAdapter(AdminSite):
     """Base class for framework-specific adapters."""
 
@@ -125,6 +133,8 @@ class AbstractAdapter(AdminSite):
         """Returns ``(content, media_type, filename)``."""
         model = self._require_model(model_name)
         config = self._registry.get(model)
+        if config and not config.exportable:
+            raise ExportNotAllowedError(model_name)
         order_list = (
             ordering.split(",") if ordering else (config.ordering if config else None)
         )
@@ -281,7 +291,10 @@ class AbstractAdapter(AdminSite):
             elif meta.python_type is bool:
                 filters[field_name] = val.lower() == "true"
             elif meta.python_type is int:
-                filters[field_name] = int(val)
+                try:
+                    filters[field_name] = int(val)
+                except (ValueError, TypeError):
+                    continue
             elif meta.python_type is str:
                 filters[f"{field_name}__icontains"] = val
             else:

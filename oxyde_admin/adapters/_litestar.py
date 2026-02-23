@@ -12,7 +12,12 @@ from litestar.types import ASGIApp, Receive, Scope, Send
 from pydantic import ValidationError
 
 from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import AbstractAdapter, ModelNotFoundError, STATIC_DIR
+from oxyde_admin.adapters.base import (
+    AbstractAdapter,
+    ExportNotAllowedError,
+    ModelNotFoundError,
+    STATIC_DIR,
+)
 
 
 class LitestarAdmin(AbstractAdapter):
@@ -36,6 +41,7 @@ class LitestarAdmin(AbstractAdapter):
             middleware.append(self._create_auth_middleware())
 
         exception_handlers: dict[type[Exception], Any] = {
+            ExportNotAllowedError: self._exc_export_not_allowed,
             ModelNotFoundError: self._exc_model_not_found,
             NotFoundError: self._exc_not_found,
             IntegrityError: self._exc_integrity,
@@ -108,6 +114,12 @@ class LitestarAdmin(AbstractAdapter):
     # ------------------------------------------------------------------
     # Exception handlers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    async def _exc_export_not_allowed(
+        request: Request, exc: ExportNotAllowedError
+    ) -> Response:
+        return Response(content={"detail": str(exc)}, status_code=403)
 
     @staticmethod
     async def _exc_model_not_found(
