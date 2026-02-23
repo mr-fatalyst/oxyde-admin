@@ -229,6 +229,7 @@ function buildExportUrl(format) {
 async function doExport(format) {
     const url = buildExportUrl(format);
     const res = await api(url);
+    if (!res.ok) return;
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
