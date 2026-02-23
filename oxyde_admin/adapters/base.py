@@ -52,6 +52,7 @@ class AbstractAdapter(AdminSite):
         preset: Preset | str = Preset.AURA,
         primary_color: PrimaryColor | str = PrimaryColor.SKY,
         surface: Surface | str = Surface.SLATE,
+        per_page: int = 100,
         auth_check: Callable | None = None,
         login_url: str | None = None,
     ) -> None:
@@ -60,6 +61,7 @@ class AbstractAdapter(AdminSite):
         self.preset = preset
         self.primary_color = primary_color
         self.surface = surface
+        self.per_page = max(1, per_page)
         self.auth_check = auth_check
         self.login_url = login_url
 
@@ -90,10 +92,12 @@ class AbstractAdapter(AdminSite):
         model_name: str,
         query_params,
         page: int = 1,
-        per_page: int = 25,
+        per_page: int | None = None,
         ordering: str | None = None,
         search: str | None = None,
     ) -> dict[str, Any]:
+        page = max(1, page)
+        per_page = max(1, min(per_page or self.per_page, self.per_page))
         model = self._require_model(model_name)
         config = self._registry.get(model)
         order_list = (
@@ -235,6 +239,7 @@ class AbstractAdapter(AdminSite):
             "version": version,
             "auth_enabled": self.auth_check is not None,
             "login_url": self.login_url,
+            "per_page": self.per_page,
             "export_warn_threshold": EXPORT_WARN_THRESHOLD,
         }
 
