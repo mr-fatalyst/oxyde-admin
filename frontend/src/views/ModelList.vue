@@ -133,11 +133,14 @@ async function loadMeta() {
     await Promise.all(promises);
     fkLookup.value = lookup;
 
-    // Build column filters for all visible columns
+    // Build column filters for filterable columns only
     const fObj = {};
     const fMeta = {};
     const fkFilterPromises = [];
-    for (const col of columns.value) {
+    const filterableCols = meta.list_filter && meta.list_filter.length > 0
+        ? columns.value.filter(col => meta.list_filter.includes(col))
+        : [];
+    for (const col of filterableCols) {
         const type = colType(col);
         if (type === 'datetime') continue;
         fObj[col] = { value: null, matchMode: 'equals' };

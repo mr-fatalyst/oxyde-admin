@@ -103,7 +103,9 @@ class AbstractAdapter(AdminSite):
         order_list = (
             ordering.split(",") if ordering else (config.ordering if config else None)
         )
-        filters = self._extract_filters(model, query_params)
+        filters = self._extract_filters(
+            model, query_params, config.list_filter if config else None
+        )
         result = await list_records(
             model,
             page=page,
@@ -142,7 +144,9 @@ class AbstractAdapter(AdminSite):
         order_list = (
             ordering.split(",") if ordering else (config.ordering if config else None)
         )
-        filters = self._extract_filters(model, query_params)
+        filters = self._extract_filters(
+            model, query_params, config.list_filter if config else None
+        )
         search_flds = config.search_fields if config else None
         total_result = await list_records(
             model,
@@ -277,10 +281,17 @@ class AbstractAdapter(AdminSite):
         return result
 
     @staticmethod
-    def _extract_filters(model, query_params) -> dict | None:
-        """Extract filter values from query params for all model columns."""
+    def _extract_filters(
+        model, query_params, list_filter: list[str] | None = None
+    ) -> dict | None:
+        """Extract filter values from query params for filterable columns."""
+        if not list_filter:
+            return None
+        allowed = set(list_filter)
         col_map = {}
         for name, col in model._db_meta.field_metadata.items():
+            if name not in allowed and col.db_column not in allowed:
+                continue
             col_map[col.db_column] = (name, col)
 
         filters = {}
