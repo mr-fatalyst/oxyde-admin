@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from oxyde.models import Model
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
-EXPORT_WARN_THRESHOLD = 10_000
 
 
 class ModelNotFoundError(Exception):
@@ -43,6 +42,15 @@ class ExportNotAllowedError(Exception):
         super().__init__(f"Export is not allowed for '{name}'")
 
 
+class ExportTooLargeError(Exception):
+    """Raised when export exceeds the maximum allowed rows."""
+
+    def __init__(self, total: int, limit: int) -> None:
+        self.total = total
+        self.limit = limit
+        super().__init__(f"Export too large: {total} rows exceed the limit of {limit}")
+
+
 class AbstractAdapter(AdminSite):
     """Base class for framework-specific adapters."""
 
@@ -54,6 +62,8 @@ class AbstractAdapter(AdminSite):
         primary_color: PrimaryColor | str = PrimaryColor.SKY,
         surface: Surface | str = Surface.SLATE,
         per_page: int = 100,
+        export_chunk_size: int = 10_000,
+        max_export_rows: int = 100_000,
         auth_check: Callable | None = None,
         login_url: str | None = None,
     ) -> None:
@@ -63,6 +73,8 @@ class AbstractAdapter(AdminSite):
         self.primary_color = primary_color
         self.surface = surface
         self.per_page = max(1, per_page)
+        self.export_chunk_size = max(1, export_chunk_size)
+        self.max_export_rows = max(1, max_export_rows)
         self.auth_check = auth_check
         self.login_url = login_url
 
@@ -136,8 +148,8 @@ class AbstractAdapter(AdminSite):
         fmt: str = "csv",
         ordering: str | None = None,
         search: str | None = None,
-    ) -> tuple[str, str, str]:
-        """Returns ``(content, media_type, filename)``."""
+    ) -> tuple[Any, str, str]:
+        """Returns ``(async_generator, media_type, filename)``."""
         model = self._require_model(model_name)
         config = self._registry.get(model)
         if config and not config.exportable:
@@ -157,17 +169,68 @@ class AbstractAdapter(AdminSite):
             search=search,
             search_fields=search_flds,
         )
-        result = await list_records(
-            model,
-            page=1,
-            per_page=total_result.total,
+        total = total_result.total
+        if total > self.max_export_rows:
+            raise ExportTooLargeError(total, self.max_export_rows)
+
+        chunk = self.export_chunk_size
+        common = dict(
             ordering=order_list,
             filters=filters,
             search=search,
             search_fields=search_flds,
         )
-        rows = [item.model_dump() for item in result.items]
-        return self._build_export_data(rows, model_name, fmt)
+
+        if fmt == "json":
+            media_type = "application/json"
+            filename = f"{model_name}.json"
+
+            async def json_stream():
+                yield "["
+                first = True
+                page = 1
+                while True:
+                    result = await list_records(
+                        model, page=page, per_page=chunk, **common
+                    )
+                    for item in result.items:
+                        row = json_mod.dumps(
+                            item.model_dump(), default=str, ensure_ascii=False
+                        )
+                        if not first:
+                            yield ","
+                        yield row
+                        first = False
+                    if len(result.items) < chunk:
+                        break
+                    page += 1
+                yield "]"
+
+            return json_stream(), media_type, filename
+
+        # CSV
+        media_type = "text/csv"
+        filename = f"{model_name}.csv"
+
+        async def csv_stream():
+            header_written = False
+            page = 1
+            while True:
+                result = await list_records(model, page=page, per_page=chunk, **common)
+                rows = [item.model_dump() for item in result.items]
+                if rows:
+                    buf = io.StringIO()
+                    writer = csv.DictWriter(buf, fieldnames=rows[0].keys())
+                    if not header_written:
+                        writer.writeheader()
+                        header_written = True
+                    writer.writerows(rows)
+                    yield buf.getvalue()
+                if len(result.items) < chunk:
+                    break
+                page += 1
+
+        return csv_stream(), media_type, filename
 
     async def _handle_get(self, model_name: str, pk: str) -> dict[str, Any]:
         model = self._require_model(model_name)
@@ -245,14 +308,14 @@ class AbstractAdapter(AdminSite):
             "auth_enabled": self.auth_check is not None,
             "login_url": self.login_url,
             "per_page": self.per_page,
-            "export_warn_threshold": EXPORT_WARN_THRESHOLD,
+            "export_chunk_size": self.export_chunk_size,
+            "max_export_rows": self.max_export_rows,
         }
 
     def _build_models_list(self) -> list[dict]:
         """Build models list data."""
         result = []
         for model, config in self._registry.items():
-            model.ensure_field_metadata()
             meta = model._db_meta
             result.append(
                 {
@@ -315,21 +378,3 @@ class AbstractAdapter(AdminSite):
             else:
                 filters[field_name] = val
         return filters or None
-
-    @staticmethod
-    def _build_export_data(
-        rows: list[dict], model_name: str, fmt: str
-    ) -> tuple[str, str, str]:
-        """Build export data. Returns (content, media_type, filename)."""
-        if fmt == "json":
-            content = json_mod.dumps(rows, default=str, ensure_ascii=False)
-            return content, "application/json", f"{model_name}.json"
-
-        # CSV
-        if not rows:
-            return "", "text/csv", f"{model_name}.csv"
-        buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=rows[0].keys())
-        writer.writeheader()
-        writer.writerows(rows)
-        return buf.getvalue(), "text/csv", f"{model_name}.csv"

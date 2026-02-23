@@ -7,7 +7,7 @@ from litestar import Litestar, Request, get, post, put, delete
 from litestar.params import Parameter
 from litestar.static_files import StaticFilesConfig
 from litestar.openapi import OpenAPIConfig
-from litestar.response import Response, File
+from litestar.response import Response, File, Stream
 from litestar.types import ASGIApp, Receive, Scope, Send
 from pydantic import ValidationError
 
@@ -15,6 +15,7 @@ from oxyde.exceptions import NotFoundError, IntegrityError
 from oxyde_admin.adapters.base import (
     AbstractAdapter,
     ExportNotAllowedError,
+    ExportTooLargeError,
     ModelNotFoundError,
     STATIC_DIR,
 )
@@ -42,6 +43,7 @@ class LitestarAdmin(AbstractAdapter):
 
         exception_handlers: dict[type[Exception], Any] = {
             ExportNotAllowedError: self._exc_export_not_allowed,
+            ExportTooLargeError: self._exc_export_too_large,
             ModelNotFoundError: self._exc_model_not_found,
             NotFoundError: self._exc_not_found,
             IntegrityError: self._exc_integrity,
@@ -122,6 +124,12 @@ class LitestarAdmin(AbstractAdapter):
         return Response(content={"detail": str(exc)}, status_code=403)
 
     @staticmethod
+    async def _exc_export_too_large(
+        request: Request, exc: ExportTooLargeError
+    ) -> Response:
+        return Response(content={"detail": str(exc)}, status_code=400)
+
+    @staticmethod
     async def _exc_model_not_found(
         request: Request, exc: ModelNotFoundError
     ) -> Response:
@@ -191,16 +199,16 @@ class LitestarAdmin(AbstractAdapter):
             fmt: str = Parameter(default="csv", query="format"),
             ordering: str | None = None,
             search: str | None = None,
-        ) -> Response:
-            content, media_type, filename = await admin._handle_export(
+        ) -> Stream:
+            stream, media_type, filename = await admin._handle_export(
                 model_name,
                 request.query_params,
                 fmt,
                 ordering,
                 search,
             )
-            return Response(
-                content=content,
+            return Stream(
+                stream,
                 media_type=media_type,
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )

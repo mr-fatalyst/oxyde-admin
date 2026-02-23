@@ -30,7 +30,8 @@ const perPage = ref(25);
 const sortField = ref(null);
 const sortOrder = ref(null);
 const searchQuery = ref('');
-const exportWarnThreshold = ref(null);
+const exportChunkSize = ref(null);
+const maxExportRows = ref(null);
 let searchTimeout = null;
 
 function buildColumnProps(schemaData) {
@@ -83,8 +84,11 @@ function formatDatetime(val) {
 async function loadMeta() {
     const configRes = await api('/api/config/');
     const config = await configRes.json();
-    if (config.export_warn_threshold) {
-        exportWarnThreshold.value = config.export_warn_threshold;
+    if (config.export_chunk_size) {
+        exportChunkSize.value = config.export_chunk_size;
+    }
+    if (config.max_export_rows) {
+        maxExportRows.value = config.max_export_rows;
     }
 
     const res = await api('/api/models/');
@@ -239,7 +243,16 @@ async function doExport(format) {
 }
 
 function exportData(format) {
-    if (exportWarnThreshold.value && totalRecords.value > exportWarnThreshold.value) {
+    if (maxExportRows.value && totalRecords.value > maxExportRows.value) {
+        confirm.require({
+            message: `Cannot export ${totalRecords.value.toLocaleString()} records. The limit is ${maxExportRows.value.toLocaleString()}.`,
+            header: 'Export Limit',
+            icon: 'pi pi-exclamation-triangle',
+            rejectLabel: 'Close',
+            rejectProps: { severity: 'secondary', text: true },
+            acceptLabel: 'OK',
+        });
+    } else if (exportChunkSize.value && totalRecords.value > exportChunkSize.value) {
         confirm.require({
             message: `You are about to export ${totalRecords.value.toLocaleString()} records. This may take a while. Continue?`,
             header: 'Large Export',

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from conftest import ConcreteAdapter
-from oxyde_admin.adapters.base import EXPORT_WARN_THRESHOLD
 from oxyde_admin.config import Preset, PrimaryColor, Surface
 
 
@@ -20,7 +19,8 @@ class TestBuildConfig:
         assert config["primary_color"] == PrimaryColor.TEAL
         assert config["surface"] == Surface.ZINC
         assert "version" in config
-        assert config["export_warn_threshold"] == EXPORT_WARN_THRESHOLD
+        assert config["export_chunk_size"] == 10_000
+        assert config["max_export_rows"] == 100_000
 
     def test_build_config_auth_disabled(self):
         adapter = ConcreteAdapter()

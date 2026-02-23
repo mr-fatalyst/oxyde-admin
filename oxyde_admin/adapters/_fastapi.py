@@ -3,7 +3,12 @@ from __future__ import annotations
 import inspect
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, Response
+from fastapi.responses import (
+    JSONResponse,
+    HTMLResponse,
+    FileResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -12,6 +17,7 @@ from oxyde.exceptions import NotFoundError, IntegrityError
 from oxyde_admin.adapters.base import (
     AbstractAdapter,
     ExportNotAllowedError,
+    ExportTooLargeError,
     ModelNotFoundError,
     STATIC_DIR,
 )
@@ -74,6 +80,12 @@ class FastAPIAdmin(AbstractAdapter):
             request: Request, exc: ExportNotAllowedError
         ) -> JSONResponse:
             return JSONResponse({"detail": str(exc)}, status_code=403)
+
+        @app.exception_handler(ExportTooLargeError)
+        async def _export_too_large(
+            request: Request, exc: ExportTooLargeError
+        ) -> JSONResponse:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
 
         @app.exception_handler(ModelNotFoundError)
         async def _model_not_found(
@@ -140,15 +152,15 @@ class FastAPIAdmin(AbstractAdapter):
             ordering: str | None = None,
             search: str | None = None,
         ):
-            content, media_type, filename = await self._handle_export(
+            stream, media_type, filename = await self._handle_export(
                 model_name,
                 request.query_params,
                 fmt,
                 ordering,
                 search,
             )
-            return Response(
-                content=content,
+            return StreamingResponse(
+                stream,
                 media_type=media_type,
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
