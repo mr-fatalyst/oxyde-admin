@@ -88,7 +88,9 @@ class AbstractAdapter(AdminSite):
     ) -> dict[str, Any]:
         model = self._require_model(model_name)
         config = self._registry.get(model)
-        order_list = ordering.split(",") if ordering else None
+        order_list = (
+            ordering.split(",") if ordering else (config.ordering if config else None)
+        )
         filters = self._extract_filters(model, query_params)
         result = await list_records(
             model,
@@ -123,7 +125,9 @@ class AbstractAdapter(AdminSite):
         """Returns ``(content, media_type, filename)``."""
         model = self._require_model(model_name)
         config = self._registry.get(model)
-        order_list = ordering.split(",") if ordering else None
+        order_list = (
+            ordering.split(",") if ordering else (config.ordering if config else None)
+        )
         filters = self._extract_filters(model, query_params)
         search_flds = config.search_fields if config else None
         total_result = await list_records(
