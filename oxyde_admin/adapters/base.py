@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import importlib.metadata
 import io
@@ -274,11 +275,9 @@ class AbstractAdapter(AdminSite):
 
     async def _build_models_counts(self) -> dict[str, int]:
         """Build model counts."""
-        result = {}
-        for model in self._registry:
-            count = await model.objects.count()
-            result[model._db_meta.table_name] = count
-        return result
+        models = list(self._registry)
+        counts = await asyncio.gather(*(m.objects.count() for m in models))
+        return {m._db_meta.table_name: c for m, c in zip(models, counts)}
 
     @staticmethod
     def _extract_filters(
