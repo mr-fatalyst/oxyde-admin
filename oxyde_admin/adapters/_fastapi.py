@@ -141,8 +141,16 @@ class FastAPIAdmin(AbstractAdapter):
             )
 
         @app.get("/api/{model_name}/options/", response_model=None)
-        async def model_options(model_name: str):
-            return await self._handle_options(model_name)
+        async def model_options(
+            model_name: str,
+            search: str | None = None,
+            limit: int = 25,
+            include: str | None = None,
+        ):
+            include_list = include.split(",") if include else None
+            return await self._handle_options(
+                model_name, search=search, limit=limit, include=include_list
+            )
 
         @app.get("/api/{model_name}/export/", response_model=None)
         async def model_export(

@@ -169,10 +169,28 @@ async function loadSchema() {
 async function loadFkOptions() {
     const fkFields = fields.value.filter((f) => f.fk);
     const promises = fkFields.map(async (f) => {
-        const res = await api(`/api/${f.fk.model}/options/`);
+        let url = `/api/${f.fk.model}/options/`;
+        const currentVal = formData.value?.[f.name];
+        if (currentVal != null) {
+            url += `?include=${encodeURIComponent(currentVal)}`;
+        }
+        const res = await api(url);
         fkOptions.value[f.name] = await res.json();
     });
     await Promise.all(promises);
+}
+
+let fkSearchTimeout = null;
+function onFkSearch(field, event) {
+    clearTimeout(fkSearchTimeout);
+    const query = event.value;
+    fkSearchTimeout = setTimeout(async () => {
+        const url = query
+            ? `/api/${field.fk.model}/options/?search=${encodeURIComponent(query)}`
+            : `/api/${field.fk.model}/options/`;
+        const res = await api(url);
+        fkOptions.value[field.name] = await res.json();
+    }, 300);
 }
 
 async function loadRecord() {
@@ -304,7 +322,7 @@ async function openFkCreate(field) {
     dlgFields.value = buildFields(dlgSchema.value);
     dlgFormData.value = initFormData(dlgFields.value, null);
 
-    // Load FK options for fields inside the dialog form
+    // Load initial FK options for fields inside the dialog form
     const nested = dlgFields.value.filter((f) => f.fk);
     const opts = {};
     await Promise.all(nested.map(async (f) => {
@@ -314,6 +332,19 @@ async function openFkCreate(field) {
     dlgFkOptions.value = opts;
 
     dlgVisible.value = true;
+}
+
+let dlgFkSearchTimeout = null;
+function onDlgFkSearch(field, event) {
+    clearTimeout(dlgFkSearchTimeout);
+    const query = event.value;
+    dlgFkSearchTimeout = setTimeout(async () => {
+        const url = query
+            ? `/api/${field.fk.model}/options/?search=${encodeURIComponent(query)}`
+            : `/api/${field.fk.model}/options/`;
+        const res = await api(url);
+        dlgFkOptions.value[field.name] = await res.json();
+    }, 300);
 }
 
 async function dlgSave() {
@@ -378,12 +409,12 @@ async function dlgSave() {
 
 onMounted(async () => {
     await loadSchema();
-    await loadFkOptions();
     if (isCreate.value) {
         formData.value = initFormData(fields.value, null);
     } else {
         await loadRecord();
     }
+    await loadFkOptions();
 });
 </script>
 
@@ -419,6 +450,8 @@ onMounted(async () => {
                             optionValue="value"
                             :showClear="!field.isRequired"
                             placeholder="Select..."
+                            filter
+                            @filter="onFkSearch(field, $event)"
                             :invalid="!!errors[field.name]"
                             fluid
                         />
@@ -531,6 +564,8 @@ onMounted(async () => {
                         optionValue="value"
                         :showClear="!field.isRequired"
                         placeholder="Select..."
+                        filter
+                        @filter="onDlgFkSearch(field, $event)"
                         :invalid="!!dlgErrors[field.name]"
                         fluid
                     />

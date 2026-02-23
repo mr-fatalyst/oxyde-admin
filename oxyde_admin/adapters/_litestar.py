@@ -189,8 +189,16 @@ class LitestarAdmin(AbstractAdapter):
             )
 
         @get("/api/{model_name:str}/options/")
-        async def model_options(model_name: str) -> list:
-            return await admin._handle_options(model_name)
+        async def model_options(
+            model_name: str,
+            search: str | None = None,
+            limit: int = 25,
+            include: str | None = None,
+        ) -> list:
+            include_list = include.split(",") if include else None
+            return await admin._handle_options(
+                model_name, search=search, limit=limit, include=include_list
+            )
 
         @get("/api/{model_name:str}/export/")
         async def model_export(

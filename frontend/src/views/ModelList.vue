@@ -15,7 +15,7 @@ const columns = ref([]);
 const records = ref([]);
 const totalRecords = ref(0);
 const loading = ref(false);
-const fkLookup = ref({});  // { column_name: { id: label } }
+const fkLabels = ref({});  // { column_name: { id: label } } — from list response
 const fkModels = ref({});  // { column_name: fk_model_name }
 const colProps = ref({});   // { column_name: schema_property }
 const searchFields = ref(null);
@@ -120,22 +120,9 @@ async function loadMeta() {
         columns.value = Object.keys(colProps.value);
     }
 
-    // Load FK lookups for columns that are foreign keys
+    // Extract FK column mapping (col → fk model name)
     const fkCols = extractFkColumns(schema);
     fkModels.value = fkCols;
-    const lookup = {};
-    const promises = Object.entries(fkCols).map(async ([col, fkModel]) => {
-        if (!columns.value.includes(col)) return;
-        const optRes = await api(`/api/${fkModel}/options/`);
-        const options = await optRes.json();
-        const map = {};
-        for (const opt of options) {
-            map[opt.value] = opt.label;
-        }
-        lookup[col] = map;
-    });
-    await Promise.all(promises);
-    fkLookup.value = lookup;
 
     // Build column filters for filterable columns only
     const fObj = {};
@@ -149,7 +136,7 @@ async function loadMeta() {
         if (type === 'datetime') continue;
         fObj[col] = { value: null, matchMode: 'equals' };
         if (type === 'fk') {
-            fMeta[col] = { type: 'fk' };
+            fMeta[col] = { type: 'fk', options: [] };
             if (fkCols[col]) {
                 fkFilterPromises.push(
                     api(`/api/${fkCols[col]}/options/`).then((r) => r.json()).then((opts) => {
@@ -188,6 +175,9 @@ async function loadRecords() {
         const data = await res.json();
         records.value = data.items;
         totalRecords.value = data.total;
+        if (data.fk_labels) {
+            fkLabels.value = data.fk_labels;
+        }
     } finally {
         loading.value = false;
     }
@@ -211,6 +201,21 @@ let filterInputTimeout = null;
 function onFilterInput(filterCallback) {
     clearTimeout(filterInputTimeout);
     filterInputTimeout = setTimeout(filterCallback, 300);
+}
+
+let fkFilterSearchTimeout = null;
+function onFkFilterSearch(col, event) {
+    clearTimeout(fkFilterSearchTimeout);
+    const query = event.value;
+    fkFilterSearchTimeout = setTimeout(async () => {
+        const fkModel = fkModels.value[col];
+        if (!fkModel) return;
+        const url = query
+            ? `/api/${fkModel}/options/?search=${encodeURIComponent(query)}`
+            : `/api/${fkModel}/options/`;
+        const res = await api(url);
+        filterMeta.value[col].options = await res.json();
+    }, 300);
 }
 
 function buildExportUrl(format) {
@@ -346,6 +351,8 @@ onMounted(async () => {
                         optionLabel="label"
                         optionValue="value"
                         :placeholder="colLabel(col)"
+                        filter
+                        @filter="onFkFilterSearch(col, $event)"
                         showClear
                         class="w-full"
                     />
@@ -391,7 +398,7 @@ onMounted(async () => {
                         class="text-primary no-underline hover:underline"
                         @click.stop
                     >
-                        &rarr; {{ fkLookup[col]?.[data[col]] ?? data[col] }}
+                        &rarr; {{ fkLabels[col]?.[data[col]] ?? data[col] }}
                     </router-link>
 
                     <!-- Boolean -->

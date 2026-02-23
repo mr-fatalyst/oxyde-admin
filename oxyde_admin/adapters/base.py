@@ -17,6 +17,7 @@ from oxyde_admin.api.routes import (
     update_record,
     delete_record,
     get_options,
+    resolve_fk_labels,
 )
 from oxyde_admin.schema import build_schema
 
@@ -128,18 +129,28 @@ class AbstractAdapter(AdminSite):
             search=search,
             search_fields=config.search_fields if config else None,
         )
+        fk_labels = await resolve_fk_labels(model, result.items, self._registry)
         return {
             "items": [item.model_dump() for item in result.items],
             "total": result.total,
             "page": result.page,
             "per_page": result.per_page,
+            "fk_labels": fk_labels,
         }
 
-    async def _handle_options(self, model_name: str) -> list[dict[str, Any]]:
+    async def _handle_options(
+        self,
+        model_name: str,
+        search: str | None = None,
+        limit: int = 25,
+        include: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         model = self._require_model(model_name)
         config = self._registry.get(model)
         display = config.display_field if config else None
-        return await get_options(model, display)
+        return await get_options(
+            model, display, search=search, limit=limit, include=include
+        )
 
     async def _handle_export(
         self,
