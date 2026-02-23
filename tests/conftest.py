@@ -62,7 +62,7 @@ def _make_mock_model(
     fields: dict[str, _ColumnMeta],
     schema: dict,
 ):
-    """Build a mock OxydeModel class with _db_meta, model_json_schema, objects."""
+    """Build a mock Model class with _db_meta, model_json_schema, objects."""
     meta = SimpleNamespace(table_name=table_name, field_metadata=fields)
     objects = _make_objects_mock()
 

@@ -20,7 +20,7 @@ from oxyde_admin.api.routes import (
 from oxyde_admin.schema import build_schema
 
 if TYPE_CHECKING:
-    from oxyde.models import OxydeModel
+    from oxyde.models import Model
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 EXPORT_WARN_THRESHOLD = 10_000
@@ -55,14 +55,14 @@ class AbstractAdapter(AdminSite):
         self.auth_check = auth_check
         self.login_url = login_url
 
-    def _resolve_model(self, name: str) -> type[OxydeModel] | None:
+    def _resolve_model(self, name: str) -> type[Model] | None:
         """Find a registered model by its table name."""
         for model in self._registry:
             if model._db_meta.table_name == name:
                 return model
         return None
 
-    def _require_model(self, name: str) -> type[OxydeModel]:
+    def _require_model(self, name: str) -> type[Model]:
         """Find a registered model by table name or raise ModelNotFoundError."""
         model = self._resolve_model(name)
         if model is None:

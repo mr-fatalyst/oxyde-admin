@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from oxyde.models import OxydeModel
+    from oxyde.models import Model
 
 
 @dataclass
@@ -16,7 +16,7 @@ class PaginatedResult:
 
 
 async def list_records(
-    model: type[OxydeModel],
+    model: type[Model],
     *,
     page: int = 1,
     per_page: int = 25,
@@ -50,26 +50,26 @@ async def list_records(
 
 
 async def get_record(
-    model: type[OxydeModel],
+    model: type[Model],
     pk: Any,
-) -> OxydeModel:
+) -> Model:
     name, pk_type = _get_pk_field(model)
     return await model.objects.get(**{name: pk_type(pk)})
 
 
 async def create_record(
-    model: type[OxydeModel],
+    model: type[Model],
     data: dict[str, Any],
-) -> OxydeModel:
+) -> Model:
     return await model.objects.create(**data)
 
 
 async def update_record(
-    model: type[OxydeModel],
+    model: type[Model],
     pk: Any,
     data: dict[str, Any],
     readonly_fields: list[str] | None = None,
-) -> OxydeModel:
+) -> Model:
     name, pk_type = _get_pk_field(model)
     record = await model.objects.get(**{name: pk_type(pk)})
     blocked = set(readonly_fields or [])
@@ -82,7 +82,7 @@ async def update_record(
 
 
 async def delete_record(
-    model: type[OxydeModel],
+    model: type[Model],
     pk: Any,
 ) -> int:
     name, pk_type = _get_pk_field(model)
@@ -90,7 +90,7 @@ async def delete_record(
 
 
 async def get_options(
-    model: type[OxydeModel],
+    model: type[Model],
     display_field: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return [{value: pk, label: display}] for FK dropdowns."""
@@ -103,14 +103,14 @@ async def get_options(
     ]
 
 
-def _get_pk_field(model: type[OxydeModel]) -> tuple[str, type]:
+def _get_pk_field(model: type[Model]) -> tuple[str, type]:
     for name, col in model._db_meta.field_metadata.items():
         if col.primary_key:
             return name, col.python_type
     raise ValueError(f"No primary key found for {model.__name__}")
 
 
-def _guess_display_field(model: type[OxydeModel]) -> str:
+def _guess_display_field(model: type[Model]) -> str:
     """Fallback: first string field, or PK."""
     for name, col in model._db_meta.field_metadata.items():
         if col.python_type is str:

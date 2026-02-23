@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from oxyde import OxydeModel, Field
+from oxyde import Model, Field
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_URL = f"sqlite:///{BASE_DIR / 'example.db'}"
 
 
-class User(OxydeModel):
+class User(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str
     email: str = Field(db_unique=True)
@@ -18,7 +18,7 @@ class User(OxydeModel):
         table_name = "users"
 
 
-class Category(OxydeModel):
+class Category(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(max_length=100, db_unique=True)
     slug: str = Field(max_length=100, db_unique=True)
@@ -28,7 +28,7 @@ class Category(OxydeModel):
         table_name = "categories"
 
 
-class Post(OxydeModel):
+class Post(Model):
     id: int | None = Field(default=None, db_pk=True)
     title: str = Field(max_length=200)
     slug: str = Field(max_length=200, db_unique=True)
@@ -43,7 +43,7 @@ class Post(OxydeModel):
         table_name = "posts"
 
 
-class Comment(OxydeModel):
+class Comment(Model):
     id: int | None = Field(default=None, db_pk=True)
     post: Post | None = Field(default=None, db_on_delete="CASCADE")
     author_name: str = Field(max_length=100)
@@ -55,7 +55,7 @@ class Comment(OxydeModel):
         table_name = "comments"
 
 
-class Tag(OxydeModel):
+class Tag(Model):
     id: int | None = Field(default=None, db_pk=True)
     name: str = Field(max_length=50, db_unique=True)
 

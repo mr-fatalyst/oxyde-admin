@@ -5,10 +5,10 @@ from typing import Any, TYPE_CHECKING
 from oxyde.models import registered_tables
 
 if TYPE_CHECKING:
-    from oxyde.models import OxydeModel
+    from oxyde.models import Model
 
 
-def build_schema(model: type[OxydeModel]) -> dict[str, Any]:
+def build_schema(model: type[Model]) -> dict[str, Any]:
     """Build JSON Schema enriched with ``x-db-*`` extensions from ``_db_meta``."""
     schema = model.model_json_schema()
     properties = schema.get("properties", {})
