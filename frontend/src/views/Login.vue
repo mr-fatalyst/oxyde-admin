@@ -8,8 +8,9 @@ const logoUrl = BASE + 'favicon.png';
 
 const router = useRouter();
 const toast = useToast();
-const adminTitle = inject('adminTitle', 'Oxyde Admin');
-const loginUrl = inject('loginUrl', null);
+const config = inject('appConfig', {});
+const adminTitle = config.title || 'Oxyde Admin';
+const loginUrl = config.login_url || null;
 
 const email = ref('');
 const password = ref('');

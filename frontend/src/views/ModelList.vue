@@ -1,8 +1,10 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, inject, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
+
+const appConfig = inject('appConfig', {});
 
 const route = useRoute();
 const router = useRouter();
@@ -30,8 +32,8 @@ const perPage = ref(25);
 const sortField = ref(null);
 const sortOrder = ref(null);
 const searchQuery = ref('');
-const exportChunkSize = ref(null);
-const maxExportRows = ref(null);
+const exportChunkSize = ref(appConfig.export_chunk_size || null);
+const maxExportRows = ref(appConfig.max_export_rows || null);
 let searchTimeout = null;
 
 function buildColumnProps(schemaData) {
@@ -82,15 +84,6 @@ function formatDatetime(val) {
 }
 
 async function loadMeta() {
-    const configRes = await api('/api/config/');
-    const config = await configRes.json();
-    if (config.export_chunk_size) {
-        exportChunkSize.value = config.export_chunk_size;
-    }
-    if (config.max_export_rows) {
-        maxExportRows.value = config.max_export_rows;
-    }
-
     const res = await api('/api/models/');
     const models = await res.json();
     const meta = models.find((m) => m.name === modelName.value);

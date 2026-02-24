@@ -39,12 +39,9 @@ async function bootstrap() {
     app.use(ToastService);
     app.use(ConfirmationService);
 
-    const title = config.title || 'Oxyde Admin';
-    document.title = title;
-    app.provide('adminTitle', title);
-    app.provide('adminVersion', config.version || '');
-    app.provide('loginUrl', config.login_url || null);
-    app.provide('authEnabled', config.auth_enabled || false);
+    config.title = config.title || 'Oxyde Admin';
+    document.title = config.title;
+    app.provide('appConfig', config);
 
     app.mount('#app');
 

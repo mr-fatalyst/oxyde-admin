@@ -7,8 +7,9 @@ import { BASE } from '@/api.js';
 const logoUrl = BASE + 'favicon.png';
 
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
-const adminTitle = inject('adminTitle', 'Oxyde Admin');
-const authEnabled = inject('authEnabled', false);
+const config = inject('appConfig', {});
+const adminTitle = config.title || 'Oxyde Admin';
+const authEnabled = config.auth_enabled || false;
 const router = useRouter();
 
 function logout() {

@@ -5,7 +5,8 @@ import { useRoute } from 'vue-router';
 import AppMenu from './AppMenu.vue';
 
 const { layoutState, isDesktop, hasOpenOverlay } = useLayout();
-const adminVersion = inject('adminVersion', '');
+const config = inject('appConfig', {});
+const adminVersion = config.version || '';
 const route = useRoute();
 const sidebarRef = ref(null);
 let outsideClickListener = null;
