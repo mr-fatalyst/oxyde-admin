@@ -148,23 +148,27 @@ async function loadMeta() {
     filterMeta.value = fMeta;
 }
 
+function buildQueryParams(extra = {}) {
+    const params = new URLSearchParams(extra);
+    if (sortField.value) {
+        params.set('ordering', (sortOrder.value === -1 ? '-' : '') + sortField.value);
+    }
+    if (searchQuery.value) {
+        params.set('search', searchQuery.value);
+    }
+    for (const [col, filter] of Object.entries(filters.value)) {
+        if (filter.value !== null && filter.value !== undefined && filter.value !== '') {
+            params.set(col, filter.value);
+        }
+    }
+    return params;
+}
+
 async function loadRecords() {
     loading.value = true;
     try {
-        let url = `/api/${modelName.value}/?page=${page.value}&per_page=${perPage.value}`;
-        if (sortField.value) {
-            const prefix = sortOrder.value === -1 ? '-' : '';
-            url += `&ordering=${prefix}${sortField.value}`;
-        }
-        if (searchQuery.value) {
-            url += `&search=${encodeURIComponent(searchQuery.value)}`;
-        }
-        for (const [col, filter] of Object.entries(filters.value)) {
-            if (filter.value !== null && filter.value !== undefined && filter.value !== '') {
-                url += `&${col}=${encodeURIComponent(filter.value)}`;
-            }
-        }
-        const res = await api(url);
+        const params = buildQueryParams({ page: page.value, per_page: perPage.value });
+        const res = await api(`/api/${modelName.value}/?${params}`);
         const data = await res.json();
         records.value = data.items;
         totalRecords.value = data.total;
@@ -212,20 +216,8 @@ function onFkFilterSearch(col, event) {
 }
 
 function buildExportUrl(format) {
-    let url = `/api/${modelName.value}/export/?format=${format}`;
-    if (sortField.value) {
-        const prefix = sortOrder.value === -1 ? '-' : '';
-        url += `&ordering=${prefix}${sortField.value}`;
-    }
-    if (searchQuery.value) {
-        url += `&search=${encodeURIComponent(searchQuery.value)}`;
-    }
-    for (const [col, filter] of Object.entries(filters.value)) {
-        if (filter.value !== null && filter.value !== undefined && filter.value !== '') {
-            url += `&${col}=${encodeURIComponent(filter.value)}`;
-        }
-    }
-    return url;
+    const params = buildQueryParams({ format });
+    return `/api/${modelName.value}/export/?${params}`;
 }
 
 async function doExport(format) {
