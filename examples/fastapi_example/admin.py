@@ -2,7 +2,7 @@ from oxyde_admin import Preset, PrimaryColor, Surface
 from oxyde_admin.adapters import FastAPIAdmin
 
 from auth import check_admin
-from models import User, Category, Post, Comment, Tag
+from models import User, Category, Post, Comment, Tag, PostTag
 
 admin = FastAPIAdmin(
     title="Mini Blog Admin",
@@ -34,13 +34,24 @@ admin.register(
 )
 admin.register(
     Post,
-    list_display=["title", "slug", "author_id", "category_id", "is_published", "views"],
+    list_display=[
+        "title",
+        "slug",
+        "author_id",
+        "category_id",
+        "is_published",
+        "views",
+        "created_at",
+        "updated_at",
+    ],
     search_fields=["title", "content"],
     list_filter=["author_id", "category_id", "is_published"],
     column_labels={
         "author_id": "Author",
         "category_id": "Category",
         "is_published": "Published",
+        "created_at": "Created",
+        "updated_at": "Updated",
     },
     group="Content",
     icon="pi pi-file-edit",
@@ -55,14 +66,26 @@ admin.register(
 )
 admin.register(
     Comment,
-    list_display=["post_id", "author_name", "is_approved"],
+    list_display=["post_id", "author_name", "is_approved", "created_at"],
     search_fields=["author_name", "body"],
     list_filter=["post_id", "is_approved"],
     column_labels={
         "post_id": "Post",
         "author_name": "Author",
         "is_approved": "Approved",
+        "created_at": "Created",
     },
     group="Engagement",
     icon="pi pi-comments",
+)
+admin.register(
+    PostTag,
+    list_display=["post_id", "tag_id"],
+    list_filter=["post_id", "tag_id"],
+    column_labels={
+        "post_id": "Post",
+        "tag_id": "Tag",
+    },
+    group="Content",
+    icon="pi pi-link",
 )

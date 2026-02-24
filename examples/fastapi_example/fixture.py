@@ -4,7 +4,7 @@ import re
 
 from oxyde import db, execute_raw
 
-from models import DB_URL, User, Category, Post, Comment, Tag
+from models import DB_URL, User, Category, Post, Comment, Tag, PostTag
 from auth import hash_password
 
 
@@ -166,6 +166,12 @@ async def main():
         )
     """)
     await execute_raw("""
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        )
+    """)
+    await execute_raw("""
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -174,7 +180,9 @@ async def main():
             views INTEGER NOT NULL DEFAULT 0,
             author_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
-            is_published BOOLEAN NOT NULL DEFAULT 1
+            is_published BOOLEAN NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     await execute_raw("""
@@ -183,13 +191,16 @@ async def main():
             post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
             author_name TEXT NOT NULL,
             body TEXT NOT NULL,
-            is_approved BOOLEAN NOT NULL DEFAULT 0
+            is_approved BOOLEAN NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
     await execute_raw("""
-        CREATE TABLE IF NOT EXISTS tags (
+        CREATE TABLE IF NOT EXISTS post_tags (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
+            post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+            UNIQUE(post_id, tag_id)
         )
     """)
 
@@ -258,6 +269,12 @@ async def main():
         )
         posts.append(post)
 
+    # Post-Tag links (each post gets 1-4 random tags)
+    for post in posts:
+        post_tags = random.sample(tags, k=random.randint(1, 4))
+        for tag in post_tags:
+            await PostTag.objects.create(post_id=post.id, tag_id=tag.id)
+
     # Comments
     for post in posts:
         num_comments = random.randint(0, 5)
@@ -271,9 +288,11 @@ async def main():
 
     total_posts = await Post.objects.count()
     total_comments = await Comment.objects.count()
+    total_post_tags = await PostTag.objects.count()
     print(
         f"Seeded {len(users)} users, {len(categories)} categories, "
-        f"{total_posts} posts, {total_comments} comments, {len(tags)} tags"
+        f"{total_posts} posts, {total_comments} comments, "
+        f"{len(tags)} tags, {total_post_tags} post-tag links"
     )
     print("Admin login: admin@example.com / admin")
 

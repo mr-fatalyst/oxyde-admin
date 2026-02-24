@@ -463,7 +463,11 @@ async function doBulkUpdate() {
     const data = {};
     for (const f of bulkFields.value) {
         if (bulkEnabled.value[f.name]) {
-            data[f.name] = bulkFormData.value[f.name];
+            let val = bulkFormData.value[f.name];
+            if (val instanceof Date) {
+                val = val.toISOString();
+            }
+            data[f.name] = val;
         }
     }
     if (Object.keys(data).length === 0) return;

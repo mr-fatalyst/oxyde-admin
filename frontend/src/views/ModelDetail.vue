@@ -137,7 +137,11 @@ function componentType(field) {
 function initFormData(fieldList, record) {
     const data = {};
     for (const f of fieldList) {
-        data[f.name] = record ? (record[f.name] ?? f.default) : f.default;
+        let val = record ? (record[f.name] ?? f.default) : f.default;
+        if (val && (f.format === 'date-time' || f.format === 'date')) {
+            val = new Date(val);
+        }
+        data[f.name] = val;
     }
     return data;
 }
@@ -160,7 +164,11 @@ function buildPayload() {
     for (const f of fields.value) {
         if (f.isReadonly) continue;
         if (f.isPk && isCreate.value) continue;
-        payload[f.name] = formData.value[f.name];
+        let val = formData.value[f.name];
+        if (val instanceof Date) {
+            val = val.toISOString();
+        }
+        payload[f.name] = val;
     }
     return payload;
 }
