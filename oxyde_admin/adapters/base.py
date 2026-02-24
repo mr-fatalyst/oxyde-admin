@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import csv
-import importlib.metadata
 import io
 import json as json_mod
 from pathlib import Path
 from typing import Any, Callable, TYPE_CHECKING
 
-from oxyde_admin import AdminSite
+from oxyde_admin import AdminSite, __version__
 from oxyde_admin.config import Preset, PrimaryColor, Surface
 from oxyde_admin.api.routes import (
     list_records,
@@ -78,6 +77,7 @@ class AbstractAdapter(AdminSite):
         self.max_export_rows = max(1, max_export_rows)
         self.auth_check = auth_check
         self.login_url = login_url
+        self.version = __version__
         self._table_index: dict[str, type[Model]] | None = None
 
     def _resolve_model(self, name: str) -> type[Model] | None:
@@ -306,16 +306,12 @@ class AbstractAdapter(AdminSite):
 
     def _build_config(self) -> dict:
         """Build config endpoint data."""
-        try:
-            version = importlib.metadata.version("oxyde-admin")
-        except importlib.metadata.PackageNotFoundError:
-            version = "dev"
         return {
             "title": self.title,
             "preset": self.preset,
             "primary_color": self.primary_color,
             "surface": self.surface,
-            "version": version,
+            "version": self.version,
             "auth_enabled": self.auth_check is not None,
             "login_url": self.login_url,
             "per_page": self.per_page,

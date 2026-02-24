@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from oxyde.models import Model
 
 
+__version__ = "0.1.0"
+
+
 class AdminSite:
     def __init__(self) -> None:
         self._registry: dict[type[Model], ModelAdmin] = {}
@@ -35,6 +38,7 @@ class AdminSite:
 
 
 __all__ = [
+    "__version__",
     "AdminSite",
     "ModelAdmin",
     "Preset",

@@ -63,7 +63,7 @@ class LitestarAdmin(AbstractAdapter):
             exception_handlers=exception_handlers,
             static_files_config=static_configs,
             openapi_config=OpenAPIConfig(
-                title="Oxyde Admin", version="0.1.0", path=None
+                title="Oxyde Admin", version=self.version, path=None
             ),
         )
 
