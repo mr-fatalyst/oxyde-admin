@@ -116,6 +116,15 @@ function hasRef(prop) {
     return false;
 }
 
+function resolveFormat(prop) {
+    if (prop.format) return prop.format;
+    if (prop.anyOf) {
+        const nonNull = prop.anyOf.find((t) => t.format);
+        if (nonNull) return nonNull.format;
+    }
+    return null;
+}
+
 function extractFkMap(schema) {
     const map = {};
     const props = schema.properties || {};
@@ -146,6 +155,8 @@ function buildBulkFields(schema, labels, roFields) {
             name,
             label: (labels && labels[name]) || prop.title || name,
             type: resolveType(prop),
+            format: resolveFormat(prop),
+            dbType: prop['x-db-type'] || null,
             isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
             fk,
@@ -158,6 +169,9 @@ function componentType(field) {
     if (field.fk) return 'select';
     if (field.type === 'boolean') return 'boolean';
     if (field.type === 'integer' || field.type === 'number') return 'number';
+    if (field.format === 'date-time') return 'datetime';
+    if (field.format === 'date') return 'date';
+    if (field.type === 'string' && !field.maxLength && (!field.dbType || field.dbType.toUpperCase() === 'TEXT')) return 'textarea';
     return 'text';
 }
 
@@ -653,6 +667,36 @@ onMounted(async () => {
                         v-model="bulkFormData[field.name]"
                         :useGrouping="false"
                         :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        fluid
+                    />
+
+                    <!-- DateTime -->
+                    <DatePicker
+                        v-else-if="componentType(field) === 'datetime'"
+                        v-model="bulkFormData[field.name]"
+                        showTime
+                        hourFormat="24"
+                        dateFormat="yy-mm-dd"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        fluid
+                    />
+
+                    <!-- Date -->
+                    <DatePicker
+                        v-else-if="componentType(field) === 'date'"
+                        v-model="bulkFormData[field.name]"
+                        dateFormat="yy-mm-dd"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        fluid
+                    />
+
+                    <!-- Textarea -->
+                    <Textarea
+                        v-else-if="componentType(field) === 'textarea'"
+                        v-model="bulkFormData[field.name]"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        rows="3"
+                        autoResize
                         fluid
                     />
 

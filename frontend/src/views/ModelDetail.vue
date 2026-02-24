@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
@@ -69,6 +69,15 @@ function extractFkMap(schemaData) {
     return map;
 }
 
+function resolveFormat(prop) {
+    if (prop.format) return prop.format;
+    if (prop.anyOf) {
+        const nonNull = prop.anyOf.find((t) => t.format);
+        if (nonNull) return nonNull.format;
+    }
+    return null;
+}
+
 function buildFields(schemaData, labels, roFields) {
     const props = schemaData.properties || {};
     const required = new Set(schemaData.required || []);
@@ -85,6 +94,8 @@ function buildFields(schemaData, labels, roFields) {
             name,
             label: (labels && labels[name]) || prop.title || name,
             type: resolveType(prop),
+            format: resolveFormat(prop),
+            dbType: prop['x-db-type'] || null,
             isPk: !!prop['x-db-primary-key'],
             isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
             isRequired: required.has(name),
@@ -117,6 +128,9 @@ function componentType(field) {
     if (field.fk) return 'select';
     if (field.type === 'boolean') return 'boolean';
     if (field.type === 'integer' || field.type === 'number') return 'number';
+    if (field.format === 'date-time') return 'datetime';
+    if (field.format === 'date') return 'date';
+    if (field.type === 'string' && !field.maxLength && (!field.dbType || field.dbType.toUpperCase() === 'TEXT')) return 'textarea';
     return 'text';
 }
 
@@ -239,6 +253,7 @@ async function save(andContinue = false) {
         const record = await res.json();
         toast.add({ severity: 'success', summary: 'Saved', detail: `${schema.value.title} saved`, life: 3000 });
 
+        navigatingAfterSave.value = true;
         if (isCreate.value) {
             const newPk = findPk(record, fields.value);
             if (newPk !== null) {
@@ -250,6 +265,7 @@ async function save(andContinue = false) {
             }
         } else if (andContinue) {
             originalData.value = JSON.parse(JSON.stringify(formData.value));
+            navigatingAfterSave.value = false;
         } else {
             router.push(`/${modelName.value}`);
         }
@@ -281,6 +297,7 @@ async function deleteRecord() {
             return;
         }
         toast.add({ severity: 'success', summary: 'Deleted', detail: `${schema.value.title} deleted`, life: 3000 });
+        navigatingAfterSave.value = true;
         router.push(`/${modelName.value}`);
     } finally {
         deleting.value = false;
@@ -407,6 +424,15 @@ async function dlgSave() {
     }
 }
 
+// --- Navigation guard ---
+
+const navigatingAfterSave = ref(false);
+
+onBeforeRouteLeave(() => {
+    if (navigatingAfterSave.value || !isDirty.value || isCreate.value) return true;
+    return window.confirm('You have unsaved changes. Leave this page?');
+});
+
 onMounted(async () => {
     await loadSchema();
     if (isCreate.value) {
@@ -490,6 +516,42 @@ onMounted(async () => {
                         :disabled="field.isReadonly"
                         :useGrouping="false"
                         :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
+                    <!-- DateTime -->
+                    <DatePicker
+                        v-else-if="componentType(field) === 'datetime'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                        showTime
+                        hourFormat="24"
+                        dateFormat="yy-mm-dd"
+                        :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
+                    <!-- Date -->
+                    <DatePicker
+                        v-else-if="componentType(field) === 'date'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                        dateFormat="yy-mm-dd"
+                        :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
+                    <!-- Textarea -->
+                    <Textarea
+                        v-else-if="componentType(field) === 'textarea'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                        :invalid="!!errors[field.name]"
+                        rows="5"
+                        autoResize
                         fluid
                     />
 
@@ -582,6 +644,36 @@ onMounted(async () => {
                         v-model="dlgFormData[field.name]"
                         :useGrouping="false"
                         :invalid="!!dlgErrors[field.name]"
+                        fluid
+                    />
+
+                    <DatePicker
+                        v-else-if="componentType(field) === 'datetime'"
+                        :id="'dlg-' + field.name"
+                        v-model="dlgFormData[field.name]"
+                        showTime
+                        hourFormat="24"
+                        dateFormat="yy-mm-dd"
+                        :invalid="!!dlgErrors[field.name]"
+                        fluid
+                    />
+
+                    <DatePicker
+                        v-else-if="componentType(field) === 'date'"
+                        :id="'dlg-' + field.name"
+                        v-model="dlgFormData[field.name]"
+                        dateFormat="yy-mm-dd"
+                        :invalid="!!dlgErrors[field.name]"
+                        fluid
+                    />
+
+                    <Textarea
+                        v-else-if="componentType(field) === 'textarea'"
+                        :id="'dlg-' + field.name"
+                        v-model="dlgFormData[field.name]"
+                        :invalid="!!dlgErrors[field.name]"
+                        rows="5"
+                        autoResize
                         fluid
                     />
 
