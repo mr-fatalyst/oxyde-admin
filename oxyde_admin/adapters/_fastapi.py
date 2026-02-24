@@ -10,17 +10,9 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.staticfiles import StaticFiles
-from pydantic import ValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import (
-    AbstractAdapter,
-    ExportNotAllowedError,
-    ExportTooLargeError,
-    ModelNotFoundError,
-    STATIC_DIR,
-)
+from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
 
 
 class FastAPIAdmin(AbstractAdapter):
@@ -29,13 +21,6 @@ class FastAPIAdmin(AbstractAdapter):
     def __init__(self, prefix: str = "/admin", **kwargs) -> None:
         super().__init__(**kwargs)
         self.prefix = prefix
-        self._app: FastAPI | None = None
-
-    @property
-    def app(self) -> FastAPI:
-        if self._app is None:
-            self._app = self._build_app()
-        return self._app
 
     def _build_app(self) -> FastAPI:
         app = FastAPI(title="Oxyde Admin", docs_url=None, redoc_url=None)
@@ -44,7 +29,7 @@ class FastAPIAdmin(AbstractAdapter):
             self._register_auth_middleware(app)
 
         self._register_exception_handlers(app)
-        self._register_api_routes(app)
+        self._register_routes(app)
         self._register_static(app)
 
         return app
@@ -53,7 +38,6 @@ class FastAPIAdmin(AbstractAdapter):
         check = self.auth_check
 
         async def auth_middleware(request: Request, call_next):
-            # Use scope path stripped of root_path (mount prefix)
             root = request.scope.get("root_path", "")
             raw_path = request.scope.get("path", request.url.path)
             path = (
@@ -61,7 +45,6 @@ class FastAPIAdmin(AbstractAdapter):
                 if root and raw_path.startswith(root)
                 else raw_path
             )
-            # Allow static files and config endpoint without auth
             if not path.startswith("/api/") or path == "/api/config/":
                 return await call_next(request)
             if inspect.iscoroutinefunction(check):
@@ -75,37 +58,18 @@ class FastAPIAdmin(AbstractAdapter):
         app.add_middleware(BaseHTTPMiddleware, dispatch=auth_middleware)
 
     def _register_exception_handlers(self, app: FastAPI) -> None:
-        @app.exception_handler(ExportNotAllowedError)
-        async def _export_not_allowed(
-            request: Request, exc: ExportNotAllowedError
-        ) -> JSONResponse:
-            return JSONResponse({"detail": str(exc)}, status_code=403)
+        for exc_cls, (status_code, detail_fn) in self.EXCEPTION_MAP.items():
 
-        @app.exception_handler(ExportTooLargeError)
-        async def _export_too_large(
-            request: Request, exc: ExportTooLargeError
-        ) -> JSONResponse:
-            return JSONResponse({"detail": str(exc)}, status_code=400)
+            def _make_handler(_status=status_code, _fn=detail_fn):
+                async def handler(request: Request, exc) -> JSONResponse:
+                    detail = _fn(exc)
+                    return JSONResponse({"detail": detail}, status_code=_status)
 
-        @app.exception_handler(ModelNotFoundError)
-        async def _model_not_found(
-            request: Request, exc: ModelNotFoundError
-        ) -> JSONResponse:
-            return JSONResponse({"detail": str(exc)}, status_code=404)
+                return handler
 
-        @app.exception_handler(NotFoundError)
-        async def _not_found(request: Request, exc: NotFoundError) -> JSONResponse:
-            return JSONResponse({"detail": str(exc)}, status_code=404)
+            app.add_exception_handler(exc_cls, _make_handler())
 
-        @app.exception_handler(IntegrityError)
-        async def _integrity(request: Request, exc: IntegrityError) -> JSONResponse:
-            return JSONResponse({"detail": str(exc)}, status_code=409)
-
-        @app.exception_handler(ValidationError)
-        async def _validation(request: Request, exc: ValidationError) -> JSONResponse:
-            return JSONResponse({"detail": exc.errors()}, status_code=422)
-
-    def _register_api_routes(self, app: FastAPI) -> None:
+    def _register_routes(self, app: FastAPI) -> None:
         @app.get("/api/config/")
         async def admin_config() -> dict:
             return self._build_config()

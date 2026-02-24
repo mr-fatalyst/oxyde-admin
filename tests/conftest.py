@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from oxyde_admin.adapters.base import AbstractAdapter
+from oxyde_admin import AdminSite
 
 
 class _ColumnMeta:
@@ -221,15 +221,9 @@ def MockNoPKModel():
 # ── Adapter fixture ───────────────────────────────────────────────────
 
 
-class ConcreteAdapter(AbstractAdapter):
-    """Minimal concrete subclass for testing base methods."""
-
-    pass
-
-
 @pytest.fixture()
-def adapter():
-    return ConcreteAdapter()
+def site():
+    return AdminSite()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

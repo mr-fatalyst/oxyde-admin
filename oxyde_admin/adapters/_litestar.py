@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any
 
 from litestar import Litestar, Request, get, post, put, delete
 from litestar.params import Parameter
@@ -9,30 +8,12 @@ from litestar.static_files import StaticFilesConfig
 from litestar.openapi import OpenAPIConfig
 from litestar.response import Response, File, Stream
 from litestar.types import ASGIApp, Receive, Scope, Send
-from pydantic import ValidationError
 
-from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.adapters.base import (
-    AbstractAdapter,
-    ExportNotAllowedError,
-    ExportTooLargeError,
-    ModelNotFoundError,
-    STATIC_DIR,
-)
+from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
 
 
 class LitestarAdmin(AbstractAdapter):
     """Litestar adapter for Oxyde Admin."""
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._app: Litestar | None = None
-
-    @property
-    def app(self) -> Litestar:
-        if self._app is None:
-            self._app = self._build_app()
-        return self._app
 
     def _build_app(self) -> Litestar:
         handlers = self._build_route_handlers()
@@ -41,14 +22,7 @@ class LitestarAdmin(AbstractAdapter):
         if self.auth_check is not None:
             middleware.append(self._create_auth_middleware())
 
-        exception_handlers: dict[type[Exception], Any] = {
-            ExportNotAllowedError: self._exc_export_not_allowed,
-            ExportTooLargeError: self._exc_export_too_large,
-            ModelNotFoundError: self._exc_model_not_found,
-            NotFoundError: self._exc_not_found,
-            IntegrityError: self._exc_integrity,
-            ValidationError: self._exc_validation,
-        }
+        exception_handlers = self._build_exception_handlers()
 
         static_configs = []
         assets_dir = STATIC_DIR / "assets"
@@ -67,6 +41,26 @@ class LitestarAdmin(AbstractAdapter):
             ),
         )
 
+    def _register_auth_middleware(self, app) -> None:
+        # Litestar builds middleware at app creation time,
+        # so this is handled via _create_auth_middleware() in _build_app().
+        pass
+
+    def _register_exception_handlers(self, app) -> None:
+        # Litestar registers exception handlers at app creation time,
+        # so this is handled via _build_exception_handlers() in _build_app().
+        pass
+
+    def _register_routes(self, app) -> None:
+        # Litestar registers route handlers at app creation time,
+        # so this is handled via _build_route_handlers() in _build_app().
+        pass
+
+    def _register_static(self, app) -> None:
+        # Litestar configures static files at app creation time,
+        # so this is handled in _build_app().
+        pass
+
     # ------------------------------------------------------------------
     # Auth middleware
     # ------------------------------------------------------------------
@@ -81,7 +75,6 @@ class LitestarAdmin(AbstractAdapter):
                     return
 
                 path = scope.get("path", "")
-                # Allow static files and config endpoint without auth
                 if not path.startswith("/api/") or path.rstrip("/") == "/api/config":
                     await app(scope, receive, send)
                     return
@@ -117,35 +110,19 @@ class LitestarAdmin(AbstractAdapter):
     # Exception handlers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    async def _exc_export_not_allowed(
-        request: Request, exc: ExportNotAllowedError
-    ) -> Response:
-        return Response(content={"detail": str(exc)}, status_code=403)
+    def _build_exception_handlers(self) -> dict:
+        handlers = {}
+        for exc_cls, (status_code, detail_fn) in self.EXCEPTION_MAP.items():
 
-    @staticmethod
-    async def _exc_export_too_large(
-        request: Request, exc: ExportTooLargeError
-    ) -> Response:
-        return Response(content={"detail": str(exc)}, status_code=400)
+            def _make_handler(_status=status_code, _fn=detail_fn):
+                async def handler(request: Request, exc) -> Response:
+                    detail = _fn(exc)
+                    return Response(content={"detail": detail}, status_code=_status)
 
-    @staticmethod
-    async def _exc_model_not_found(
-        request: Request, exc: ModelNotFoundError
-    ) -> Response:
-        return Response(content={"detail": str(exc)}, status_code=404)
+                return handler
 
-    @staticmethod
-    async def _exc_not_found(request: Request, exc: NotFoundError) -> Response:
-        return Response(content={"detail": str(exc)}, status_code=404)
-
-    @staticmethod
-    async def _exc_integrity(request: Request, exc: IntegrityError) -> Response:
-        return Response(content={"detail": str(exc)}, status_code=409)
-
-    @staticmethod
-    async def _exc_validation(request: Request, exc: ValidationError) -> Response:
-        return Response(content={"detail": exc.errors()}, status_code=422)
+            handlers[exc_cls] = _make_handler()
+        return handlers
 
     # ------------------------------------------------------------------
     # Route handlers
@@ -240,13 +217,6 @@ class LitestarAdmin(AbstractAdapter):
         # -- SPA catch-all -------------------------------------------------
 
         def _get_mount_prefix(request: Request) -> str:
-            """Derive mount prefix from scope.
-
-            Litestar ASGI mounts strip the prefix from ``path`` but keep it in
-            ``raw_path``.  ``root_path`` is only set by the ASGI server (e.g.
-            uvicorn ``--root-path``), not by the framework mount, so we fall
-            back to comparing raw vs stripped path.
-            """
             root = request.scope.get("root_path", "")
             if root:
                 return root

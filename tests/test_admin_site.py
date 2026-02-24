@@ -43,7 +43,7 @@ class TestRegister:
 
 
 class TestRegisterAll:
-    @patch("oxyde_admin.iter_tables")
+    @patch("oxyde_admin.site.iter_tables")
     def test_register_all(self, mock_iter, MockUser, MockPost):
         mock_iter.return_value = [MockUser, MockPost]
         site = AdminSite()
@@ -52,7 +52,7 @@ class TestRegisterAll:
         assert MockUser in site._registry
         assert MockPost in site._registry
 
-    @patch("oxyde_admin.iter_tables")
+    @patch("oxyde_admin.site.iter_tables")
     def test_register_all_exclude(self, mock_iter, MockUser, MockPost):
         mock_iter.return_value = [MockUser, MockPost]
         site = AdminSite()
@@ -61,7 +61,7 @@ class TestRegisterAll:
         assert MockUser in site._registry
         assert MockPost not in site._registry
 
-    @patch("oxyde_admin.iter_tables")
+    @patch("oxyde_admin.site.iter_tables")
     def test_register_all_skips_existing(self, mock_iter, MockUser):
         mock_iter.return_value = [MockUser]
         site = AdminSite()
