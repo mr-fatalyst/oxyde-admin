@@ -53,9 +53,4 @@ router.beforeEach((to) => {
     return true;
 });
 
-router.previousRoute = null;
-router.afterEach((to, from) => {
-    router.previousRoute = from.fullPath;
-});
-
 export default router;

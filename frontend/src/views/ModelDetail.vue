@@ -299,7 +299,7 @@ function parseValidationErrors(data) {
 }
 
 function goBack() {
-    if (router.previousRoute && router.previousRoute !== '/') {
+    if (window.history.state?.back) {
         router.back();
     } else {
         router.push(`/${modelName.value}`);
