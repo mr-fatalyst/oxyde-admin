@@ -89,6 +89,32 @@ async def delete_record(
     return await model.objects.filter(**{name: pk_type(pk)}).delete()
 
 
+async def bulk_delete(
+    model: type[Model],
+    ids: list[Any],
+) -> int:
+    name, pk_type = _get_pk_field(model)
+    typed_ids = [pk_type(i) for i in ids]
+    return await model.objects.filter(**{f"{name}__in": typed_ids}).delete()
+
+
+async def bulk_update(
+    model: type[Model],
+    ids: list[Any],
+    data: dict[str, Any],
+    readonly_fields: list[str] | None = None,
+) -> int:
+    name, pk_type = _get_pk_field(model)
+    typed_ids = [pk_type(i) for i in ids]
+    blocked = set(readonly_fields or [])
+    blocked.add(name)
+    clean = {k: v for k, v in data.items() if k not in blocked}
+    if not clean:
+        return 0
+    rows = await model.objects.filter(**{f"{name}__in": typed_ids}).update(**clean)
+    return len(rows)
+
+
 async def get_options(
     model: type[Model],
     display_field: str | None = None,

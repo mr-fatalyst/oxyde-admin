@@ -1,7 +1,8 @@
 <script setup>
-import { ref, inject, onMounted } from 'vue';
+import { ref, inject, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useConfirm } from 'primevue/useconfirm';
+import { useToast } from 'primevue/usetoast';
 import { api } from '@/api.js';
 
 const appConfig = inject('appConfig', {});
@@ -9,6 +10,7 @@ const appConfig = inject('appConfig', {});
 const route = useRoute();
 const router = useRouter();
 const confirm = useConfirm();
+const toast = useToast();
 
 const modelName = ref(route.params.model);
 const verboseName = ref('');
@@ -26,6 +28,7 @@ const columnLabels = ref({});
 const filters = ref({});       // PrimeVue filter state: { col: { value, matchMode } }
 const filterMeta = ref({});    // { col: { type, options? } }
 const pkFieldName = ref(null);
+const readonlyFieldSet = ref(new Set());
 
 const page = ref(1);
 const perPage = ref(25);
@@ -36,9 +39,22 @@ const exportChunkSize = ref(appConfig.export_chunk_size || null);
 const maxExportRows = ref(appConfig.max_export_rows || null);
 let searchTimeout = null;
 
-function buildColumnProps(schemaData) {
+// --- Selection ---
+const selectedRecords = ref([]);
+const hasSelection = computed(() => selectedRecords.value.length > 0);
+
+// --- Bulk Update Dialog ---
+const bulkDlgVisible = ref(false);
+const bulkFields = ref([]);        // fields for the form (from schema)
+const bulkFormData = ref({});      // field values
+const bulkEnabled = ref({});       // checkbox state per field
+const bulkFkOptions = ref({});     // fk options per field
+const bulkSaving = ref(false);
+const schemaData = ref(null);      // cached schema
+
+function buildColumnProps(schema) {
     const result = {};
-    const props = schemaData.properties || {};
+    const props = schema.properties || {};
     for (const [fieldName, prop] of Object.entries(props)) {
         const col = prop['x-db-column'] || fieldName;
         result[col] = prop;
@@ -46,9 +62,9 @@ function buildColumnProps(schemaData) {
     return result;
 }
 
-function extractFkColumns(schemaData) {
+function extractFkColumns(schema) {
     const map = {};
-    const props = schemaData.properties || {};
+    const props = schema.properties || {};
     for (const [, prop] of Object.entries(props)) {
         const hasRefProp = prop.$ref || (prop.anyOf && prop.anyOf.some((t) => t.$ref));
         if (!hasRefProp) continue;
@@ -83,6 +99,70 @@ function formatDatetime(val) {
     return d.toLocaleString();
 }
 
+// --- Schema field helpers (shared with ModelDetail logic) ---
+
+function resolveType(prop) {
+    if (prop.type) return prop.type;
+    if (prop.anyOf) {
+        const nonNull = prop.anyOf.find((t) => t.type && t.type !== 'null');
+        if (nonNull) return nonNull.type;
+    }
+    return 'string';
+}
+
+function hasRef(prop) {
+    if (prop.$ref) return true;
+    if (prop.anyOf) return prop.anyOf.some((t) => t.$ref);
+    return false;
+}
+
+function extractFkMap(schema) {
+    const map = {};
+    const props = schema.properties || {};
+    for (const [, prop] of Object.entries(props)) {
+        if (!hasRef(prop)) continue;
+        const fk = prop['x-db-foreign-key'];
+        const col = prop['x-db-column'];
+        if (fk && col) {
+            map[col] = fk;
+        }
+    }
+    return map;
+}
+
+function buildBulkFields(schema, labels, roFields) {
+    const props = schema.properties || {};
+    const roSet = new Set(roFields || []);
+    const fkMap = extractFkMap(schema);
+    const result = [];
+
+    for (const [name, prop] of Object.entries(props)) {
+        if (hasRef(prop)) continue;
+        const isPk = !!prop['x-db-primary-key'];
+        if (isPk) continue;
+
+        const fk = fkMap[name] || null;
+        result.push({
+            name,
+            label: (labels && labels[name]) || prop.title || name,
+            type: resolveType(prop),
+            isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
+            maxLength: prop.maxLength || prop['x-db-max-length'] || null,
+            fk,
+        });
+    }
+    return result;
+}
+
+function componentType(field) {
+    if (field.fk) return 'select';
+    if (field.type === 'boolean') return 'boolean';
+    if (field.type === 'integer' || field.type === 'number') return 'number';
+    return 'text';
+}
+
+// --- Load meta & records ---
+
 async function loadMeta() {
     const res = await api('/api/models/');
     const models = await res.json();
@@ -94,9 +174,11 @@ async function loadMeta() {
     searchFields.value = meta.search_fields;
     columnLabels.value = meta.column_labels || {};
     exportable.value = meta.exportable !== false;
+    readonlyFieldSet.value = new Set(meta.readonly_fields || []);
 
     const schemaRes = await api(`/api/${modelName.value}/schema/`);
     const schema = await schemaRes.json();
+    schemaData.value = schema;
 
     colProps.value = buildColumnProps(schema);
 
@@ -217,6 +299,10 @@ function onFkFilterSearch(col, event) {
 
 function buildExportUrl(format) {
     const params = buildQueryParams({ format });
+    if (hasSelection.value && pkFieldName.value) {
+        const ids = selectedRecords.value.map((r) => r[pkFieldName.value]).join(',');
+        params.set('ids', ids);
+    }
     return `/api/${modelName.value}/export/?${params}`;
 }
 
@@ -281,6 +367,112 @@ function onRowClick(event) {
     }
 }
 
+// --- Bulk Delete ---
+
+function confirmBulkDelete() {
+    const count = selectedRecords.value.length;
+    confirm.require({
+        message: `Are you sure you want to delete ${count} record(s)?`,
+        header: 'Confirm Bulk Delete',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Cancel',
+        rejectProps: { severity: 'secondary', text: true },
+        acceptLabel: 'Delete',
+        acceptProps: { severity: 'danger' },
+        accept: doBulkDelete,
+    });
+}
+
+async function doBulkDelete() {
+    const ids = selectedRecords.value.map((r) => r[pkFieldName.value]);
+    const res = await api(`/api/${modelName.value}/bulk-delete/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    toast.add({ severity: 'success', summary: 'Deleted', detail: `${data.deleted} record(s) deleted`, life: 3000 });
+    selectedRecords.value = [];
+    await loadRecords();
+}
+
+// --- Bulk Update Dialog ---
+
+function openBulkUpdate() {
+    if (!schemaData.value) return;
+    bulkFields.value = buildBulkFields(schemaData.value, columnLabels.value, [...readonlyFieldSet.value]);
+    const formInit = {};
+    const enabledInit = {};
+    for (const f of bulkFields.value) {
+        const ct = componentType(f);
+        if (ct === 'boolean') formInit[f.name] = false;
+        else if (ct === 'number') formInit[f.name] = 0;
+        else if (ct === 'text') formInit[f.name] = '';
+        else formInit[f.name] = null;
+        enabledInit[f.name] = false;
+    }
+    bulkFormData.value = formInit;
+    bulkEnabled.value = enabledInit;
+    bulkFkOptions.value = {};
+    bulkSaving.value = false;
+
+    // Load FK options for fields that have FK
+    const fkFields = bulkFields.value.filter((f) => f.fk);
+    for (const f of fkFields) {
+        api(`/api/${f.fk.model}/options/`).then((r) => r.json()).then((opts) => {
+            bulkFkOptions.value[f.name] = opts;
+        });
+    }
+
+    bulkDlgVisible.value = true;
+}
+
+let bulkFkSearchTimeout = null;
+function onBulkFkSearch(field, event) {
+    clearTimeout(bulkFkSearchTimeout);
+    const query = event.value;
+    bulkFkSearchTimeout = setTimeout(async () => {
+        const url = query
+            ? `/api/${field.fk.model}/options/?search=${encodeURIComponent(query)}`
+            : `/api/${field.fk.model}/options/`;
+        const res = await api(url);
+        bulkFkOptions.value[field.name] = await res.json();
+    }, 300);
+}
+
+const bulkEnabledCount = computed(() => {
+    return Object.values(bulkEnabled.value).filter(Boolean).length;
+});
+
+async function doBulkUpdate() {
+    const data = {};
+    for (const f of bulkFields.value) {
+        if (bulkEnabled.value[f.name]) {
+            data[f.name] = bulkFormData.value[f.name];
+        }
+    }
+    if (Object.keys(data).length === 0) return;
+
+    bulkSaving.value = true;
+    try {
+        const ids = selectedRecords.value.map((r) => r[pkFieldName.value]);
+        const res = await api(`/api/${modelName.value}/bulk-update/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids, data }),
+        });
+        if (!res.ok) return;
+        const result = await res.json();
+        toast.add({ severity: 'success', summary: 'Updated', detail: `${result.updated} record(s) updated`, life: 3000 });
+        bulkDlgVisible.value = false;
+        selectedRecords.value = [];
+        await loadRecords();
+    } finally {
+        bulkSaving.value = false;
+    }
+}
+
 onMounted(async () => {
     await loadMeta();
     await loadRecords();
@@ -293,12 +485,15 @@ onMounted(async () => {
             <div class="flex items-center gap-2">
                 <span class="text-xl font-semibold">{{ verboseName }}</span>
                 <Tag :value="tableName" severity="secondary" class="font-mono text-xs" />
+                <Tag v-if="hasSelection" :value="`${selectedRecords.length} selected`" severity="info" />
             </div>
             <div class="flex items-center gap-2">
                 <IconField v-if="searchFields && searchFields.length > 0">
                     <InputIcon class="pi pi-search" />
                     <InputText :placeholder="`Search ${verboseName}...`" @input="onSearch" />
                 </IconField>
+                <Button v-if="hasSelection" label="Update" icon="pi pi-pencil" severity="warn" @click="openBulkUpdate" />
+                <Button v-if="hasSelection" label="Delete" icon="pi pi-trash" severity="danger" @click="confirmBulkDelete" />
                 <SplitButton v-if="exportable" label="CSV" icon="pi pi-download" severity="secondary" @click="exportData('csv')" :model="exportItems" />
                 <Button label="Create" icon="pi pi-plus" @click="router.push(`/${modelName}/create`)" />
             </div>
@@ -316,6 +511,8 @@ onMounted(async () => {
             :sortField="sortField"
             :sortOrder="sortOrder"
             v-model:filters="filters"
+            v-model:selection="selectedRecords"
+            :dataKey="pkFieldName"
             filterDisplay="row"
             @page="onPage"
             @sort="onSort"
@@ -325,6 +522,7 @@ onMounted(async () => {
             rowHover
             class="cursor-pointer"
         >
+            <Column selectionMode="multiple" headerStyle="width: 3rem" />
             <Column v-for="col in columns" :key="col" :field="col" :header="colLabel(col)" :sortable="true" :showFilterMenu="false">
                 <template v-if="filterMeta[col]" #filter="{ filterModel, filterCallback }">
                     <!-- FK filter -->
@@ -404,6 +602,76 @@ onMounted(async () => {
                 </template>
             </Column>
         </DataTable>
+
+        <!-- Bulk Update Dialog -->
+        <Dialog
+            v-model:visible="bulkDlgVisible"
+            :header="`Update ${selectedRecords.length} record(s)`"
+            modal
+            :style="{ width: '36rem' }"
+        >
+            <form @submit.prevent="doBulkUpdate" class="flex flex-col gap-4">
+                <div v-for="field in bulkFields" :key="field.name" class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <Checkbox
+                            v-if="!field.isReadonly"
+                            v-model="bulkEnabled[field.name]"
+                            :binary="true"
+                            :inputId="'bulk-chk-' + field.name"
+                        />
+                        <label :for="'bulk-chk-' + field.name" class="font-semibold">
+                            {{ field.label }}
+                        </label>
+                        <Tag v-if="field.isReadonly" value="readonly" severity="secondary" class="text-xs" />
+                    </div>
+
+                    <!-- FK Select -->
+                    <Select
+                        v-if="componentType(field) === 'select'"
+                        v-model="bulkFormData[field.name]"
+                        :options="bulkFkOptions[field.name] || []"
+                        optionLabel="label"
+                        optionValue="value"
+                        showClear
+                        placeholder="Select..."
+                        filter
+                        @filter="onBulkFkSearch(field, $event)"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        fluid
+                    />
+
+                    <!-- Boolean -->
+                    <ToggleSwitch
+                        v-else-if="componentType(field) === 'boolean'"
+                        v-model="bulkFormData[field.name]"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                    />
+
+                    <!-- Number -->
+                    <InputNumber
+                        v-else-if="componentType(field) === 'number'"
+                        v-model="bulkFormData[field.name]"
+                        :useGrouping="false"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        fluid
+                    />
+
+                    <!-- Text -->
+                    <InputText
+                        v-else
+                        v-model="bulkFormData[field.name]"
+                        :maxlength="field.maxLength"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        fluid
+                    />
+                </div>
+
+                <div class="flex justify-end gap-2 mt-2">
+                    <Button label="Cancel" severity="secondary" text @click="bulkDlgVisible = false" />
+                    <Button type="submit" label="Update" icon="pi pi-check" :loading="bulkSaving" :disabled="bulkEnabledCount === 0" />
+                </div>
+            </form>
+        </Dialog>
 
         <ConfirmDialog />
     </div>

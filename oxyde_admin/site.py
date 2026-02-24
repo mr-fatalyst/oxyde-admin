@@ -177,9 +177,10 @@ class AdminSite:
         fmt: str = "csv",
         ordering: str | None = None,
         search: str | None = None,
+        ids: list | None = None,
     ) -> tuple[Any, str, str]:
         """Returns ``(async_generator, media_type, filename)``."""
-        from oxyde_admin.api.routes import list_records
+        from oxyde_admin.api.routes import list_records, _get_pk_field
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
@@ -191,6 +192,11 @@ class AdminSite:
         filters = self._extract_filters(
             model, query_params, config.list_filter if config else None
         )
+        if ids:
+            pk_name, pk_type = _get_pk_field(model)
+            typed_ids = [pk_type(i) for i in ids]
+            filters = filters or {}
+            filters[f"{pk_name}__in"] = typed_ids
         search_flds = config.search_fields if config else None
         total_result = await list_records(
             model,
@@ -300,6 +306,28 @@ class AdminSite:
         model = self._require_model(model_name)
         count = await delete_record(model, pk)
         return {"deleted": count}
+
+    async def _handle_bulk_delete(self, model_name: str, ids: list) -> dict[str, Any]:
+        from oxyde_admin.api.routes import bulk_delete
+
+        model = self._require_model(model_name)
+        count = await bulk_delete(model, ids)
+        return {"deleted": count}
+
+    async def _handle_bulk_update(
+        self, model_name: str, ids: list, data: dict[str, Any]
+    ) -> dict[str, Any]:
+        from oxyde_admin.api.routes import bulk_update
+
+        model = self._require_model(model_name)
+        config = self._registry.get(model)
+        count = await bulk_update(
+            model,
+            ids,
+            data,
+            readonly_fields=config.readonly_fields if config else None,
+        )
+        return {"updated": count}
 
     # ------------------------------------------------------------------
     # Config / models list / counts

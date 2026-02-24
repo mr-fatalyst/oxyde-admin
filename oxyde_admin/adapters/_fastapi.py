@@ -123,13 +123,16 @@ class FastAPIAdmin(AbstractAdapter):
             fmt: str = Query("csv", alias="format"),
             ordering: str | None = None,
             search: str | None = None,
+            ids: str | None = None,
         ):
+            id_list = ids.split(",") if ids else None
             stream, media_type, filename = await self._handle_export(
                 model_name,
                 request.query_params,
                 fmt,
                 ordering,
                 search,
+                ids=id_list,
             )
             return StreamingResponse(
                 stream,
@@ -154,6 +157,16 @@ class FastAPIAdmin(AbstractAdapter):
         @app.delete("/api/{model_name}/{pk}/", response_model=None)
         async def model_delete(model_name: str, pk: str):
             return await self._handle_delete(model_name, pk)
+
+        @app.post("/api/{model_name}/bulk-delete/", response_model=None)
+        async def model_bulk_delete(model_name: str, request: Request):
+            body = await request.json()
+            return await self._handle_bulk_delete(model_name, body["ids"])
+
+        @app.post("/api/{model_name}/bulk-update/", response_model=None)
+        async def model_bulk_update(model_name: str, request: Request):
+            body = await request.json()
+            return await self._handle_bulk_update(model_name, body["ids"], body["data"])
 
     def _register_static(self, app: FastAPI) -> None:
         assets_dir = STATIC_DIR / "assets"

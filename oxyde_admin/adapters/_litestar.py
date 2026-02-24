@@ -184,13 +184,16 @@ class LitestarAdmin(AbstractAdapter):
             fmt: str = Parameter(default="csv", query="format"),
             ordering: str | None = None,
             search: str | None = None,
+            ids: str | None = None,
         ) -> Stream:
+            id_list = ids.split(",") if ids else None
             stream, media_type, filename = await admin._handle_export(
                 model_name,
                 request.query_params,
                 fmt,
                 ordering,
                 search,
+                ids=id_list,
             )
             return Stream(
                 stream,
@@ -213,6 +216,16 @@ class LitestarAdmin(AbstractAdapter):
         @delete("/api/{model_name:str}/{pk:str}/", status_code=200)
         async def model_delete(model_name: str, pk: str) -> dict:
             return await admin._handle_delete(model_name, pk)
+
+        @post("/api/{model_name:str}/bulk-delete/")
+        async def model_bulk_delete(model_name: str, data: dict) -> dict:
+            return await admin._handle_bulk_delete(model_name, data["ids"])
+
+        @post("/api/{model_name:str}/bulk-update/")
+        async def model_bulk_update(model_name: str, data: dict) -> dict:
+            return await admin._handle_bulk_update(
+                model_name, data["ids"], data["data"]
+            )
 
         # -- SPA catch-all -------------------------------------------------
 
@@ -260,6 +273,8 @@ class LitestarAdmin(AbstractAdapter):
             model_create,
             model_update,
             model_delete,
+            model_bulk_delete,
+            model_bulk_update,
             index,
             catch_all,
         ]
