@@ -78,13 +78,13 @@ class AbstractAdapter(AdminSite):
         self.max_export_rows = max(1, max_export_rows)
         self.auth_check = auth_check
         self.login_url = login_url
+        self._table_index: dict[str, type[Model]] | None = None
 
     def _resolve_model(self, name: str) -> type[Model] | None:
         """Find a registered model by its table name."""
-        for model in self._registry:
-            if model._db_meta.table_name == name:
-                return model
-        return None
+        if self._table_index is None:
+            self._table_index = {m._db_meta.table_name: m for m in self._registry}
+        return self._table_index.get(name)
 
     def _require_model(self, name: str) -> type[Model]:
         """Find a registered model by table name or raise ModelNotFoundError."""
