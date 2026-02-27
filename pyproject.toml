@@ -1,21 +1,37 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "oxyde-admin"
 version = "0.1.0"
 description = "Admin interface for Oxyde ORM"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
+authors = [
+    {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
+]
+keywords = ["admin", "orm", "oxyde", "crud", "dashboard", "pydantic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Framework :: Pydantic :: 2",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
 dependencies = [
     "oxyde>=0.4.0",
 ]
-
-[tool.setuptools.packages.find]
-include = ["oxyde_admin*"]
-
-[tool.setuptools.package-data]
-oxyde_admin = ["static/**/*"]
 
 [project.optional-dependencies]
 dev = [
@@ -27,6 +43,17 @@ dev = [
     "uvicorn",
     "pyjwt",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mr-fatalyst/oxyde-admin"
+Repository = "https://github.com/mr-fatalyst/oxyde-admin"
+Issues = "https://github.com/mr-fatalyst/oxyde-admin/issues"
+
+[tool.setuptools.packages.find]
+include = ["oxyde_admin*"]
+
+[tool.setuptools.package-data]
+oxyde_admin = ["static/**/*"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

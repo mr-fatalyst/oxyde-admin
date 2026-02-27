@@ -121,6 +121,7 @@ class SanicAdmin(AbstractAdapter):
         bp = Blueprint("oxyde_admin", url_prefix=self.prefix)
         admin = self
         api_prefix = self.prefix + "/api/"
+        config_path = api_prefix + "config"
 
         # -- Auth middleware ------------------------------------------------
 
@@ -132,7 +133,7 @@ class SanicAdmin(AbstractAdapter):
                 path = request.path.rstrip("/")
                 if not path.startswith(api_prefix.rstrip("/")):
                     return None
-                if path.endswith("/api/config"):
+                if path == config_path:
                     return None
                 if inspect.iscoroutinefunction(check):
                     allowed = await check(request)

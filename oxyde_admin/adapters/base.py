@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin import (
+from oxyde_admin.site import (
     AdminSite,
     ExportNotAllowedError,
     ExportTooLargeError,
