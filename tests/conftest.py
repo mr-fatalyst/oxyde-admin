@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from oxyde_admin import AdminSite
+from oxyde_admin.site import AdminSite
 
 
 class _ColumnMeta:
