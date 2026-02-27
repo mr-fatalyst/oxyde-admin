@@ -14,7 +14,7 @@ const model = ref([
 
 onMounted(async () => {
     try {
-        const res = await api('/api/models/');
+        const res = await api('/api/models');
         const models = await res.json();
 
         const groups = {};

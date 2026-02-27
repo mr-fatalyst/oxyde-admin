@@ -177,8 +177,8 @@ function buildPayload() {
 
 async function loadSchema() {
     const [schemaRes, modelsRes] = await Promise.all([
-        api(`/api/${modelName.value}/schema/`),
-        api('/api/models/'),
+        api(`/api/${modelName.value}/schema`),
+        api('/api/models'),
     ]);
     schema.value = await schemaRes.json();
     const models = await modelsRes.json();
@@ -191,7 +191,7 @@ async function loadSchema() {
 async function loadFkOptions() {
     const fkFields = fields.value.filter((f) => f.fk);
     const promises = fkFields.map(async (f) => {
-        let url = `/api/${f.fk.model}/options/`;
+        let url = `/api/${f.fk.model}/options`;
         const currentVal = formData.value?.[f.name];
         if (currentVal != null) {
             url += `?include=${encodeURIComponent(currentVal)}`;
@@ -208,8 +208,8 @@ function onFkSearch(field, event) {
     const query = event.value;
     fkSearchTimeout = setTimeout(async () => {
         const url = query
-            ? `/api/${field.fk.model}/options/?search=${encodeURIComponent(query)}`
-            : `/api/${field.fk.model}/options/`;
+            ? `/api/${field.fk.model}/options?search=${encodeURIComponent(query)}`
+            : `/api/${field.fk.model}/options`;
         const res = await api(url);
         fkOptions.value[field.name] = await res.json();
     }, 300);
@@ -218,7 +218,7 @@ function onFkSearch(field, event) {
 async function loadRecord() {
     loading.value = true;
     try {
-        const res = await api(`/api/${modelName.value}/${pk.value}/`);
+        const res = await api(`/api/${modelName.value}/${pk.value}`);
         formData.value = initFormData(fields.value, await res.json());
         originalData.value = JSON.parse(JSON.stringify(formData.value));
     } finally {
@@ -238,8 +238,8 @@ async function save(andContinue = false) {
 
     try {
         const url = isCreate.value
-            ? `/api/${modelName.value}/`
-            : `/api/${modelName.value}/${pk.value}/`;
+            ? `/api/${modelName.value}`
+            : `/api/${modelName.value}/${pk.value}`;
 
         const res = await api(url, {
             method: isCreate.value ? 'POST' : 'PUT',
@@ -298,7 +298,7 @@ function confirmDelete() {
 async function deleteRecord() {
     deleting.value = true;
     try {
-        const res = await api(`/api/${modelName.value}/${pk.value}/`, { method: 'DELETE' });
+        const res = await api(`/api/${modelName.value}/${pk.value}`, { method: 'DELETE' });
         if (!res.ok) {
             const data = await res.json();
             toast.add({ severity: 'error', summary: 'Error', detail: data.detail || 'Delete failed', life: 5000 });
@@ -342,7 +342,7 @@ async function openFkCreate(field) {
     dlgErrors.value = {};
     dlgSaving.value = false;
 
-    const res = await api(`/api/${field.fk.model}/schema/`);
+    const res = await api(`/api/${field.fk.model}/schema`);
     dlgSchema.value = await res.json();
     dlgFields.value = buildFields(dlgSchema.value);
     dlgFormData.value = initFormData(dlgFields.value, null);
@@ -351,7 +351,7 @@ async function openFkCreate(field) {
     const nested = dlgFields.value.filter((f) => f.fk);
     const opts = {};
     await Promise.all(nested.map(async (f) => {
-        const r = await api(`/api/${f.fk.model}/options/`);
+        const r = await api(`/api/${f.fk.model}/options`);
         opts[f.name] = await r.json();
     }));
     dlgFkOptions.value = opts;
@@ -365,8 +365,8 @@ function onDlgFkSearch(field, event) {
     const query = event.value;
     dlgFkSearchTimeout = setTimeout(async () => {
         const url = query
-            ? `/api/${field.fk.model}/options/?search=${encodeURIComponent(query)}`
-            : `/api/${field.fk.model}/options/`;
+            ? `/api/${field.fk.model}/options?search=${encodeURIComponent(query)}`
+            : `/api/${field.fk.model}/options`;
         const res = await api(url);
         dlgFkOptions.value[field.name] = await res.json();
     }, 300);
@@ -390,7 +390,7 @@ async function dlgSave() {
             payload[f.name] = dlgFormData.value[f.name];
         }
 
-        const res = await api(`/api/${fkModel}/`, {
+        const res = await api(`/api/${fkModel}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -422,7 +422,7 @@ async function dlgSave() {
 
         // Refresh options for the parent FK field and select the new record
         const parentField = dlgField.value;
-        const optRes = await api(`/api/${parentField.fk.model}/options/`);
+        const optRes = await api(`/api/${parentField.fk.model}/options`);
         fkOptions.value[parentField.name] = await optRes.json();
         formData.value[parentField.name] = newPk;
 

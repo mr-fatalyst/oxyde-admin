@@ -23,6 +23,7 @@ dev = [
     "pytest-asyncio",
     "fastapi",
     "litestar",
+    "sanic",
     "uvicorn",
     "pyjwt",
 ]

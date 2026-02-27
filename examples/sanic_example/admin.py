@@ -1,12 +1,13 @@
-from oxyde_admin import LitestarAdmin, Preset, PrimaryColor, Surface
+from oxyde_admin import SanicAdmin, Preset, PrimaryColor, Surface
+
 from auth import check_admin
 from models import User, Category, Post, Comment, Tag, PostTag
 
-admin = LitestarAdmin(
+admin = SanicAdmin(
     title="Mini Blog Admin",
-    preset=Preset.LARA,
-    primary_color=PrimaryColor.AMBER,
-    surface=Surface.STONE,
+    preset=Preset.NORA,
+    primary_color=PrimaryColor.ROSE,
+    surface=Surface.SLATE,
     auth_check=check_admin,
     login_url="/auth/login",
 )

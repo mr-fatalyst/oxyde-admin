@@ -1,5 +1,4 @@
-from oxyde_admin import Preset, PrimaryColor, Surface
-from oxyde_admin.adapters import FastAPIAdmin
+from oxyde_admin import FastAPIAdmin, Preset, PrimaryColor, Surface
 
 from auth import check_admin
 from models import User, Category, Post, Comment, Tag, PostTag

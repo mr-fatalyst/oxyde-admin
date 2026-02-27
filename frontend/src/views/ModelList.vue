@@ -178,7 +178,7 @@ function componentType(field) {
 // --- Load meta & records ---
 
 async function loadMeta() {
-    const res = await api('/api/models/');
+    const res = await api('/api/models');
     const models = await res.json();
     const meta = models.find((m) => m.name === modelName.value);
     if (!meta) return;
@@ -190,7 +190,7 @@ async function loadMeta() {
     exportable.value = meta.exportable !== false;
     readonlyFieldSet.value = new Set(meta.readonly_fields || []);
 
-    const schemaRes = await api(`/api/${modelName.value}/schema/`);
+    const schemaRes = await api(`/api/${modelName.value}/schema`);
     const schema = await schemaRes.json();
     schemaData.value = schema;
 
@@ -228,7 +228,7 @@ async function loadMeta() {
             fMeta[col] = { type: 'fk', options: [] };
             if (fkCols[col]) {
                 fkFilterPromises.push(
-                    api(`/api/${fkCols[col]}/options/`).then((r) => r.json()).then((opts) => {
+                    api(`/api/${fkCols[col]}/options`).then((r) => r.json()).then((opts) => {
                         fMeta[col].options = opts;
                     })
                 );
@@ -264,7 +264,7 @@ async function loadRecords() {
     loading.value = true;
     try {
         const params = buildQueryParams({ page: page.value, per_page: perPage.value });
-        const res = await api(`/api/${modelName.value}/?${params}`);
+        const res = await api(`/api/${modelName.value}?${params}`);
         const data = await res.json();
         records.value = data.items;
         totalRecords.value = data.total;
@@ -304,8 +304,8 @@ function onFkFilterSearch(col, event) {
         const fkModel = fkModels.value[col];
         if (!fkModel) return;
         const url = query
-            ? `/api/${fkModel}/options/?search=${encodeURIComponent(query)}`
-            : `/api/${fkModel}/options/`;
+            ? `/api/${fkModel}/options?search=${encodeURIComponent(query)}`
+            : `/api/${fkModel}/options`;
         const res = await api(url);
         filterMeta.value[col].options = await res.json();
     }, 300);
@@ -317,7 +317,7 @@ function buildExportUrl(format) {
         const ids = selectedRecords.value.map((r) => r[pkFieldName.value]).join(',');
         params.set('ids', ids);
     }
-    return `/api/${modelName.value}/export/?${params}`;
+    return `/api/${modelName.value}/export?${params}`;
 }
 
 async function doExport(format) {
@@ -399,7 +399,7 @@ function confirmBulkDelete() {
 
 async function doBulkDelete() {
     const ids = selectedRecords.value.map((r) => r[pkFieldName.value]);
-    const res = await api(`/api/${modelName.value}/bulk-delete/`, {
+    const res = await api(`/api/${modelName.value}/bulk-delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
@@ -434,7 +434,7 @@ function openBulkUpdate() {
     // Load FK options for fields that have FK
     const fkFields = bulkFields.value.filter((f) => f.fk);
     for (const f of fkFields) {
-        api(`/api/${f.fk.model}/options/`).then((r) => r.json()).then((opts) => {
+        api(`/api/${f.fk.model}/options`).then((r) => r.json()).then((opts) => {
             bulkFkOptions.value[f.name] = opts;
         });
     }
@@ -448,8 +448,8 @@ function onBulkFkSearch(field, event) {
     const query = event.value;
     bulkFkSearchTimeout = setTimeout(async () => {
         const url = query
-            ? `/api/${field.fk.model}/options/?search=${encodeURIComponent(query)}`
-            : `/api/${field.fk.model}/options/`;
+            ? `/api/${field.fk.model}/options?search=${encodeURIComponent(query)}`
+            : `/api/${field.fk.model}/options`;
         const res = await api(url);
         bulkFkOptions.value[field.name] = await res.json();
     }, 300);
@@ -475,7 +475,7 @@ async function doBulkUpdate() {
     bulkSaving.value = true;
     try {
         const ids = selectedRecords.value.map((r) => r[pkFieldName.value]);
-        const res = await api(`/api/${modelName.value}/bulk-update/`, {
+        const res = await api(`/api/${modelName.value}/bulk-update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids, data }),

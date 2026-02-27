@@ -1,4 +1,4 @@
-.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar
+.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic
 
 VENV = .venv/bin
 
@@ -25,3 +25,9 @@ run-litestar:
 
 fixture-litestar:
 	cd examples/litestar_example && ../../$(VENV)/python fixture.py
+
+run-sanic:
+	cd examples/sanic_example && ../../$(VENV)/sanic app:app --dev --port 8000
+
+fixture-sanic:
+	cd examples/sanic_example && ../../$(VENV)/python fixture.py

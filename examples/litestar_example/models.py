@@ -9,9 +9,9 @@ DB_URL = f"sqlite:///{BASE_DIR / 'example.db'}"
 
 class User(Model):
     id: int | None = Field(default=None, db_pk=True)
-    name: str
-    email: str = Field(db_unique=True)
-    password_hash: str = ""
+    name: str = Field(max_length=100)
+    email: str = Field(max_length=100, db_unique=True)
+    password_hash: str = Field(default="", max_length=255)
     is_admin: bool = False
 
     class Meta:

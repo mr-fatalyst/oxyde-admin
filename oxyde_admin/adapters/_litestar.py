@@ -131,23 +131,23 @@ class LitestarAdmin(AbstractAdapter):
     def _build_route_handlers(self) -> list:
         admin = self
 
-        @get("/api/config/")
+        @get("/api/config")
         async def admin_config() -> dict:
             return admin._build_config()
 
-        @get("/api/models/")
+        @get("/api/models")
         async def models_list() -> list[dict]:
             return admin._build_models_list()
 
-        @get("/api/models/counts/")
+        @get("/api/models/counts")
         async def models_counts() -> dict[str, int]:
             return await admin._build_models_counts()
 
-        @get("/api/{model_name:str}/schema/")
+        @get("/api/{model_name:str}/schema")
         async def model_schema(model_name: str) -> dict:
             return await admin._handle_schema(model_name)
 
-        @get("/api/{model_name:str}/")
+        @get("/api/{model_name:str}")
         async def model_list(
             request: Request,
             model_name: str,
@@ -165,7 +165,7 @@ class LitestarAdmin(AbstractAdapter):
                 search,
             )
 
-        @get("/api/{model_name:str}/options/")
+        @get("/api/{model_name:str}/options")
         async def model_options(
             model_name: str,
             search: str | None = None,
@@ -177,7 +177,7 @@ class LitestarAdmin(AbstractAdapter):
                 model_name, search=search, limit=limit, include=include_list
             )
 
-        @get("/api/{model_name:str}/export/")
+        @get("/api/{model_name:str}/export")
         async def model_export(
             request: Request,
             model_name: str,
@@ -201,27 +201,27 @@ class LitestarAdmin(AbstractAdapter):
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
-        @get("/api/{model_name:str}/{pk:str}/")
+        @get("/api/{model_name:str}/{pk:str}")
         async def model_get(model_name: str, pk: str) -> dict:
             return await admin._handle_get(model_name, pk)
 
-        @post("/api/{model_name:str}/", status_code=201)
+        @post("/api/{model_name:str}", status_code=201)
         async def model_create(model_name: str, data: dict) -> dict:
             return await admin._handle_create(model_name, data)
 
-        @put("/api/{model_name:str}/{pk:str}/")
+        @put("/api/{model_name:str}/{pk:str}")
         async def model_update(model_name: str, pk: str, data: dict) -> dict:
             return await admin._handle_update(model_name, pk, data)
 
-        @delete("/api/{model_name:str}/{pk:str}/", status_code=200)
+        @delete("/api/{model_name:str}/{pk:str}", status_code=200)
         async def model_delete(model_name: str, pk: str) -> dict:
             return await admin._handle_delete(model_name, pk)
 
-        @post("/api/{model_name:str}/bulk-delete/")
+        @post("/api/{model_name:str}/bulk-delete")
         async def model_bulk_delete(model_name: str, data: dict) -> dict:
             return await admin._handle_bulk_delete(model_name, data["ids"])
 
-        @post("/api/{model_name:str}/bulk-update/")
+        @post("/api/{model_name:str}/bulk-update")
         async def model_bulk_update(model_name: str, data: dict) -> dict:
             return await admin._handle_bulk_update(
                 model_name, data["ids"], data["data"]

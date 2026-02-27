@@ -8,8 +8,8 @@ const groups = ref([]);
 
 onMounted(async () => {
     const [modelsRes, countsRes] = await Promise.all([
-        api('/api/models/'),
-        api('/api/models/counts/'),
+        api('/api/models'),
+        api('/api/models/counts'),
     ]);
     const models = await modelsRes.json();
     const counts = await countsRes.json();

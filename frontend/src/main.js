@@ -15,7 +15,7 @@ import '@/assets/styles.scss';
 async function bootstrap() {
     let config = { title: 'Oxyde Admin', preset: 'Aura', primary_color: 'sky', surface: 'slate' };
     try {
-        const res = await api('/api/config/');
+        const res = await api('/api/config');
         if (res.ok) config = await res.json();
     } catch {
         // use defaults

@@ -20,7 +20,7 @@ const modelsData = ref([]);
 
 onMounted(async () => {
     try {
-        const res = await api('/api/models/');
+        const res = await api('/api/models');
         modelsData.value = await res.json();
     } catch (e) {
         console.error('Failed to load models:', e);

@@ -45,7 +45,7 @@ class FastAPIAdmin(AbstractAdapter):
                 if root and raw_path.startswith(root)
                 else raw_path
             )
-            if not path.startswith("/api/") or path == "/api/config/":
+            if not path.startswith("/api/") or path == "/api/config":
                 return await call_next(request)
             if inspect.iscoroutinefunction(check):
                 allowed = await check(request)
@@ -70,23 +70,23 @@ class FastAPIAdmin(AbstractAdapter):
             app.add_exception_handler(exc_cls, _make_handler())
 
     def _register_routes(self, app: FastAPI) -> None:
-        @app.get("/api/config/")
+        @app.get("/api/config")
         async def admin_config() -> dict:
             return self._build_config()
 
-        @app.get("/api/models/")
+        @app.get("/api/models")
         async def models_list() -> list[dict]:
             return self._build_models_list()
 
-        @app.get("/api/models/counts/")
+        @app.get("/api/models/counts")
         async def models_counts() -> dict[str, int]:
             return await self._build_models_counts()
 
-        @app.get("/api/{model_name}/schema/", response_model=None)
+        @app.get("/api/{model_name}/schema", response_model=None)
         async def model_schema(model_name: str):
             return await self._handle_schema(model_name)
 
-        @app.get("/api/{model_name}/", response_model=None)
+        @app.get("/api/{model_name}", response_model=None)
         async def model_list(
             request: Request,
             model_name: str,
@@ -104,7 +104,7 @@ class FastAPIAdmin(AbstractAdapter):
                 search,
             )
 
-        @app.get("/api/{model_name}/options/", response_model=None)
+        @app.get("/api/{model_name}/options", response_model=None)
         async def model_options(
             model_name: str,
             search: str | None = None,
@@ -116,7 +116,7 @@ class FastAPIAdmin(AbstractAdapter):
                 model_name, search=search, limit=limit, include=include_list
             )
 
-        @app.get("/api/{model_name}/export/", response_model=None)
+        @app.get("/api/{model_name}/export", response_model=None)
         async def model_export(
             request: Request,
             model_name: str,
@@ -140,30 +140,30 @@ class FastAPIAdmin(AbstractAdapter):
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'},
             )
 
-        @app.get("/api/{model_name}/{pk}/", response_model=None)
+        @app.get("/api/{model_name}/{pk}", response_model=None)
         async def model_get(model_name: str, pk: str):
             return await self._handle_get(model_name, pk)
 
-        @app.post("/api/{model_name}/", status_code=201, response_model=None)
+        @app.post("/api/{model_name}", status_code=201, response_model=None)
         async def model_create(model_name: str, request: Request):
             data = await request.json()
             return await self._handle_create(model_name, data)
 
-        @app.put("/api/{model_name}/{pk}/", response_model=None)
+        @app.put("/api/{model_name}/{pk}", response_model=None)
         async def model_update(model_name: str, pk: str, request: Request):
             data = await request.json()
             return await self._handle_update(model_name, pk, data)
 
-        @app.delete("/api/{model_name}/{pk}/", response_model=None)
+        @app.delete("/api/{model_name}/{pk}", response_model=None)
         async def model_delete(model_name: str, pk: str):
             return await self._handle_delete(model_name, pk)
 
-        @app.post("/api/{model_name}/bulk-delete/", response_model=None)
+        @app.post("/api/{model_name}/bulk-delete", response_model=None)
         async def model_bulk_delete(model_name: str, request: Request):
             body = await request.json()
             return await self._handle_bulk_delete(model_name, body["ids"])
 
-        @app.post("/api/{model_name}/bulk-update/", response_model=None)
+        @app.post("/api/{model_name}/bulk-update", response_model=None)
         async def model_bulk_update(model_name: str, request: Request):
             body = await request.json()
             return await self._handle_bulk_update(model_name, body["ids"], body["data"])
