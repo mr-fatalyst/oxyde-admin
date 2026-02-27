@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from oxyde_admin import AdminSite
+from oxyde_admin.site import AdminSite
 
 
 class TestExtractFilters:

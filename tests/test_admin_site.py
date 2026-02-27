@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from oxyde_admin import AdminSite
+from oxyde_admin.site import AdminSite
 from oxyde_admin.config import ModelAdmin
 
 

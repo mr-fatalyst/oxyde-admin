@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from oxyde_admin import AdminSite
+from oxyde_admin.site import AdminSite
 from oxyde_admin.config import Preset, PrimaryColor, Surface
 
 
