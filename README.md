@@ -22,7 +22,8 @@
 - **Export** -CSV and JSON export with applied filters
 - **Authentication** -pluggable auth via callback, JWT-ready
 - **Theming** -3 presets, 17 colors, 8 surface palettes
-- **Multi-framework** -FastAPI and Litestar adapters
+- **Bulk operations** -bulk delete and update from list view
+- **Multi-framework** -FastAPI, Litestar and Sanic adapters
 
 ![oxyde-admin list view](images/screenshot-list.png)
 
@@ -37,7 +38,7 @@ pip install oxyde-admin
 ```python
 from fastapi import FastAPI
 from oxyde import db
-from oxyde_admin.adapters import FastAPIAdmin
+from oxyde_admin import FastAPIAdmin
 
 from models import User, Post, Comment
 
@@ -59,7 +60,7 @@ Open `http://localhost:8000/admin/` and get a full CRUD interface for your model
 ### FastAPI
 
 ```python
-from oxyde_admin.adapters import FastAPIAdmin
+from oxyde_admin import FastAPIAdmin
 
 admin = FastAPIAdmin(title="My Admin")
 # register models...
@@ -70,7 +71,7 @@ app.mount("/admin", admin.app)
 
 ```python
 from litestar import Litestar, asgi
-from oxyde_admin.adapters import LitestarAdmin
+from oxyde_admin import LitestarAdmin
 
 admin = LitestarAdmin(title="My Admin")
 # register models...
@@ -80,6 +81,20 @@ app = Litestar(
         asgi(path="/admin", is_mount=True)(admin.app),
     ],
 )
+```
+
+### Sanic
+
+```python
+from sanic import Sanic
+from oxyde_admin import SanicAdmin
+
+admin = SanicAdmin(title="My Admin")
+# register models...
+
+app = Sanic("MyApp")
+admin.register_exception_handlers(app)
+app.blueprint(admin.blueprint)
 ```
 
 ## Model registration
