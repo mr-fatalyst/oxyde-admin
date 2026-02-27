@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Logo" width="300">
+  <img src="https://raw.githubusercontent.com/mr-fatalyst/oxyde-admin/main/logo.png" alt="Logo" width="300">
 </p>
 
 <p align="center"> <b>Oxyde Admin</b> Auto-generated admin panel for <a href="https://github.com/mr-fatalyst/oxyde">Oxyde ORM</a> with zero boilerplate. </p>
@@ -25,7 +25,7 @@
 - **Bulk operations** -bulk delete and update from list view
 - **Multi-framework** -FastAPI, Litestar and Sanic adapters
 
-![oxyde-admin list view](images/screenshot-list.png)
+![oxyde-admin list view](https://raw.githubusercontent.com/mr-fatalyst/oxyde-admin/main/images/screenshot-list.png)
 
 ## Installation
 
@@ -53,7 +53,7 @@ app.mount("/admin", admin.app)
 
 Open `http://localhost:8000/admin/` and get a full CRUD interface for your models.
 
-![edit form](images/screenshot-detail.png)
+![edit form](https://raw.githubusercontent.com/mr-fatalyst/oxyde-admin/main/images/screenshot-detail.png)
 
 ## Frameworks
 
@@ -150,7 +150,7 @@ admin = FastAPIAdmin(
 )
 ```
 
-![themes](images/screenshot-themes.png)
+![themes](https://raw.githubusercontent.com/mr-fatalyst/oxyde-admin/main/images/screenshot-themes.png)
 
 **Presets:** `AURA`, `LARA`, `NORA`
 
