@@ -1,4 +1,4 @@
-.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic run-quart fixture-quart
+.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic run-quart fixture-quart run-falcon fixture-falcon
 
 VENV = .venv/bin
 
@@ -37,3 +37,9 @@ run-quart:
 
 fixture-quart:
 	cd examples/quart_example && ../../$(VENV)/python fixture.py
+
+run-falcon:
+	cd examples/falcon_example && ../../$(VENV)/uvicorn app:app --reload --port 8000
+
+fixture-falcon:
+	cd examples/falcon_example && ../../$(VENV)/python fixture.py

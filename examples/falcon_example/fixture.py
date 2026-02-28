@@ -1,0 +1,310 @@
+import asyncio
+import hashlib
+import random
+import re
+import secrets
+
+from oxyde import db, execute_raw
+
+from models import DB_URL, User, Category, Post, Comment, Tag, PostTag
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.sha256((salt + password).encode()).hexdigest()
+    return f"{salt}${digest}"
+
+
+def slugify(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+USERS = [
+    ("Admin", "admin@example.com", "admin", True),
+    ("Alice Johnson", "alice@example.com", "alice123", False),
+    ("Bob Smith", "bob@example.com", "bob123", False),
+    ("Carol White", "carol@example.com", "carol123", False),
+    ("Dave Brown", "dave@example.com", "dave123", False),
+]
+
+CATEGORIES = [
+    ("Tutorials", "tutorials"),
+    ("Guides", "guides"),
+    ("Quick Tips", "quick-tips"),
+    ("Release Notes", "release-notes"),
+    ("Community", "community"),
+]
+
+TAGS = [
+    "python",
+    "async",
+    "orm",
+    "sqlite",
+    "postgresql",
+    "fastapi",
+    "pydantic",
+    "testing",
+    "deployment",
+    "docker",
+    "performance",
+    "security",
+    "beginner",
+    "advanced",
+    "tutorial",
+]
+
+TITLES = [
+    "Getting Started with Oxyde",
+    "Advanced Query Patterns",
+    "Database Migrations Guide",
+    "Working with Foreign Keys",
+    "Async Python Best Practices",
+    "Building REST APIs",
+    "Authentication Deep Dive",
+    "Deploying to Production",
+    "Performance Tuning Tips",
+    "Testing Strategies",
+    "Error Handling Patterns",
+    "Caching with Redis",
+    "WebSocket Integration",
+    "File Upload Handling",
+    "Pagination Done Right",
+    "Full-Text Search",
+    "Background Tasks",
+    "Rate Limiting",
+    "Logging and Monitoring",
+    "CI/CD Pipeline Setup",
+    "Docker Compose Workflow",
+    "Type Safety in Python",
+    "Pydantic v2 Migration",
+    "SQLite vs PostgreSQL",
+    "Data Validation Patterns",
+    "API Versioning",
+    "GraphQL vs REST",
+    "Event-Driven Architecture",
+    "Microservices with FastAPI",
+    "Security Best Practices",
+]
+
+EXTRA_TITLES = [
+    "Quick Tip: F-Expressions",
+    "Quick Tip: Q Objects",
+    "Quick Tip: Select Related",
+    "Quick Tip: Bulk Operations",
+    "Quick Tip: Raw SQL",
+    "Quick Tip: Transactions",
+    "Quick Tip: Model Hooks",
+    "Quick Tip: Custom Managers",
+    "Quick Tip: Aggregation",
+    "Quick Tip: Subqueries",
+    "Tutorial: Blog App Part 1",
+    "Tutorial: Blog App Part 2",
+    "Tutorial: Blog App Part 3",
+    "Tutorial: Blog App Part 4",
+    "Tutorial: Blog App Part 5",
+    "Tutorial: Chat App Part 1",
+    "Tutorial: Chat App Part 2",
+    "Tutorial: Chat App Part 3",
+    "Tutorial: Todo App",
+    "Tutorial: E-Commerce App",
+    "Release Notes v0.1.0",
+    "Release Notes v0.2.0",
+    "Release Notes v0.3.0",
+    "Roadmap 2025",
+    "Community Highlights",
+    "Contributor Guide",
+    "FAQ",
+    "Troubleshooting Common Errors",
+    "Changelog",
+    "Benchmarks Update",
+]
+
+COMMENT_BODIES = [
+    "Great article, thanks for sharing!",
+    "This helped me solve a tricky bug.",
+    "Could you elaborate on the second section?",
+    "I've been looking for this, very useful.",
+    "Nice writeup! One small correction though...",
+    "Would love to see a follow-up on this topic.",
+    "Clear and concise, bookmarked.",
+    "How does this compare to Django's approach?",
+    "Worked perfectly, thanks!",
+    "I ran into an issue with step 3, any ideas?",
+    "Excellent explanation of a complex topic.",
+    "This should be in the official docs.",
+    "Thanks, saved me hours of debugging.",
+    "Any plans to support MySQL as well?",
+    "The code examples are really helpful.",
+]
+
+COMMENTER_NAMES = [
+    "anonymous",
+    "dev_jane",
+    "rustfan42",
+    "py_newbie",
+    "dbadmin",
+    "webdev_mike",
+    "sarah_codes",
+    "linux_user",
+    "async_lover",
+    "sql_guru",
+    "fastapi_fan",
+    "beginner123",
+]
+
+
+async def main():
+    await db.init(default=DB_URL)
+
+    await execute_raw("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL DEFAULT '',
+            is_admin BOOLEAN NOT NULL DEFAULT 0
+        )
+    """)
+    await execute_raw("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            slug TEXT NOT NULL UNIQUE
+        )
+    """)
+    await execute_raw("""
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        )
+    """)
+    await execute_raw("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            content TEXT NOT NULL DEFAULT '',
+            views INTEGER NOT NULL DEFAULT 0,
+            author_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+            is_published BOOLEAN NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await execute_raw("""
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+            author_name TEXT NOT NULL,
+            body TEXT NOT NULL,
+            is_approved BOOLEAN NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    await execute_raw("""
+        CREATE TABLE IF NOT EXISTS post_tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+            tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+            UNIQUE(post_id, tag_id)
+        )
+    """)
+
+    count = await User.objects.count()
+    if count > 0:
+        print(f"Already has {count} users, skipping")
+        await db.close()
+        return
+
+    random.seed(42)
+
+    # Users
+    users = []
+    for name, email, password, is_admin in USERS:
+        user = await User.objects.create(
+            name=name,
+            email=email,
+            password_hash=hash_password(password),
+            is_admin=is_admin,
+        )
+        users.append(user)
+
+    # Categories
+    categories = []
+    for name, slug in CATEGORIES:
+        cat = await Category.objects.create(name=name, slug=slug)
+        categories.append(cat)
+
+    # Tags
+    tags = []
+    for name in TAGS:
+        tag = await Tag.objects.create(name=name)
+        tags.append(tag)
+
+    # Posts
+    posts = []
+    for i, title in enumerate(TITLES):
+        author = random.choice(users)
+        category = random.choice(categories)
+        views = random.randint(0, 5000)
+        content = f"Content for article #{i + 1}: {title}. " * random.randint(1, 4)
+        post = await Post.objects.create(
+            title=title,
+            slug=slugify(title),
+            content=content.strip(),
+            views=views,
+            author_id=author.id,
+            category_id=category.id,
+            is_published=True,
+        )
+        posts.append(post)
+
+    for title in EXTRA_TITLES:
+        author = random.choice(users)
+        category = random.choice(categories)
+        views = random.randint(0, 2000)
+        published = random.random() > 0.2
+        post = await Post.objects.create(
+            title=title,
+            slug=slugify(title),
+            content=f"Content for {title}.",
+            views=views,
+            author_id=author.id,
+            category_id=category.id,
+            is_published=published,
+        )
+        posts.append(post)
+
+    # Post-Tag links (each post gets 1-4 random tags)
+    for post in posts:
+        post_tags = random.sample(tags, k=random.randint(1, 4))
+        for tag in post_tags:
+            await PostTag.objects.create(post_id=post.id, tag_id=tag.id)
+
+    # Comments
+    for post in posts:
+        num_comments = random.randint(0, 5)
+        for _ in range(num_comments):
+            await Comment.objects.create(
+                post_id=post.id,
+                author_name=random.choice(COMMENTER_NAMES),
+                body=random.choice(COMMENT_BODIES),
+                is_approved=random.random() > 0.3,
+            )
+
+    total_posts = await Post.objects.count()
+    total_comments = await Comment.objects.count()
+    total_post_tags = await PostTag.objects.count()
+    print(
+        f"Seeded {len(users)} users, {len(categories)} categories, "
+        f"{total_posts} posts, {total_comments} comments, "
+        f"{len(tags)} tags, {total_post_tags} post-tag links"
+    )
+    print("Admin login: admin@example.com / admin")
+
+    await db.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
