@@ -285,7 +285,8 @@ class AdminSite:
         from oxyde_admin.api.routes import create_record
 
         model = self._require_model(model_name)
-        record = await create_record(model, data)
+        clean, m2m_data = self._extract_m2m(model, data)
+        record = await create_record(model, clean, m2m_data=m2m_data)
         return record.model_dump()
 
     async def _handle_update(
@@ -295,11 +296,13 @@ class AdminSite:
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
+        clean, m2m_data = self._extract_m2m(model, data)
         record = await update_record(
             model,
             pk,
-            data,
+            clean,
             readonly_fields=config.readonly_fields if config else None,
+            m2m_data=m2m_data,
         )
         return record.model_dump()
 
@@ -384,6 +387,27 @@ class AdminSite:
     # ------------------------------------------------------------------
     # Filter extraction
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_m2m(
+        model, data: dict[str, Any]
+    ) -> tuple[dict[str, Any], dict[str, list] | None]:
+        """Separate M2M fields from regular data."""
+        m2m_names = {
+            name
+            for name, rel in model._db_meta.relations.items()
+            if rel.kind == "many_to_many"
+        }
+        if not m2m_names:
+            return data, None
+        clean = {}
+        m2m_data = {}
+        for k, v in data.items():
+            if k in m2m_names:
+                m2m_data[k] = v if isinstance(v, list) else []
+            else:
+                clean[k] = v
+        return clean, m2m_data or None
 
     @staticmethod
     def _extract_filters(

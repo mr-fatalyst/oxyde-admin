@@ -86,6 +86,25 @@ function buildFields(schemaData, labels, roFields) {
     const result = [];
 
     for (const [name, prop] of Object.entries(props)) {
+        // M2M field
+        if (prop['x-db-m2m']) {
+            result.push({
+                name,
+                label: (labels && labels[name]) || prop.title || name,
+                type: 'array',
+                format: null,
+                dbType: null,
+                isPk: false,
+                isReadonly: roSet.has(name),
+                isRequired: false,
+                default: [],
+                maxLength: null,
+                fk: null,
+                m2m: { target: prop['x-db-target'], through: prop['x-db-through'] },
+            });
+            continue;
+        }
+
         if (hasRef(prop)) continue;
 
         const fk = fkMap[name] || null;
@@ -102,6 +121,7 @@ function buildFields(schemaData, labels, roFields) {
             default: prop.default ?? null,
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
             fk,
+            m2m: null,
         });
     }
 
@@ -125,6 +145,7 @@ const dlgVisibleFields = computed(() => {
 });
 
 function componentType(field) {
+    if (field.m2m) return 'multiselect';
     if (field.fk) return 'select';
     if (field.type === 'boolean') return 'boolean';
     if (field.type === 'integer' || field.type === 'number') return 'number';
@@ -138,7 +159,13 @@ function initFormData(fieldList, record) {
     const data = {};
     for (const f of fieldList) {
         let val = record ? (record[f.name] ?? f.default) : f.default;
-        if (val && (f.format === 'date-time' || f.format === 'date')) {
+        if (f.m2m && Array.isArray(val)) {
+            // M2M values come as [{value, label}] from fkOptions or as objects from API
+            val = val.map((item) => {
+                if (typeof item !== 'object') return item;
+                return item.value ?? item.id ?? Object.values(item)[0];
+            }).filter((v) => v != null);
+        } else if (val && (f.format === 'date-time' || f.format === 'date')) {
             val = new Date(val);
         }
         data[f.name] = val;
@@ -165,6 +192,10 @@ function buildPayload() {
         if (f.isReadonly) continue;
         if (f.isPk && isCreate.value) continue;
         let val = formData.value[f.name];
+        if (f.m2m) {
+            payload[f.name] = Array.isArray(val) ? val : [];
+            continue;
+        }
         if (val instanceof Date) {
             val = val.toISOString();
         }
@@ -190,6 +221,7 @@ async function loadSchema() {
 
 async function loadFkOptions() {
     const fkFields = fields.value.filter((f) => f.fk);
+    const m2mFields = fields.value.filter((f) => f.m2m);
     const promises = fkFields.map(async (f) => {
         let url = `/api/${f.fk.model}/options`;
         const currentVal = formData.value?.[f.name];
@@ -199,7 +231,17 @@ async function loadFkOptions() {
         const res = await api(url);
         fkOptions.value[f.name] = await res.json();
     });
-    await Promise.all(promises);
+    const m2mPromises = m2mFields.map(async (f) => {
+        let url = `/api/${f.m2m.target}/options`;
+        const currentVals = formData.value?.[f.name];
+        if (Array.isArray(currentVals) && currentVals.length > 0) {
+            const params = currentVals.map((v) => `include=${encodeURIComponent(v)}`).join('&');
+            url += `?${params}`;
+        }
+        const res = await api(url);
+        fkOptions.value[f.name] = await res.json();
+    });
+    await Promise.all([...promises, ...m2mPromises]);
 }
 
 let fkSearchTimeout = null;
@@ -210,6 +252,19 @@ function onFkSearch(field, event) {
         const url = query
             ? `/api/${field.fk.model}/options?search=${encodeURIComponent(query)}`
             : `/api/${field.fk.model}/options`;
+        const res = await api(url);
+        fkOptions.value[field.name] = await res.json();
+    }, 300);
+}
+
+let m2mFilterTimeout = null;
+function onM2mFilter(field, event) {
+    clearTimeout(m2mFilterTimeout);
+    const query = event.value;
+    m2mFilterTimeout = setTimeout(async () => {
+        const url = query
+            ? `/api/${field.m2m.target}/options?search=${encodeURIComponent(query)}`
+            : `/api/${field.m2m.target}/options`;
         const res = await api(url);
         fkOptions.value[field.name] = await res.json();
     }, 300);
@@ -474,8 +529,24 @@ onMounted(async () => {
                         <span v-if="field.isRequired" class="text-red-500">*</span>
                     </label>
 
+                    <!-- M2M MultiSelect -->
+                    <MultiSelect
+                        v-if="componentType(field) === 'multiselect'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :options="fkOptions[field.name] || []"
+                        optionLabel="label"
+                        optionValue="value"
+                        :disabled="field.isReadonly"
+                        display="chip"
+                        filter
+                        @filter="onM2mFilter(field, $event)"
+                        placeholder="Select..."
+                        fluid
+                    />
+
                     <!-- FK Select -->
-                    <div v-if="componentType(field) === 'select'" class="flex gap-2 items-center">
+                    <div v-else-if="componentType(field) === 'select'" class="flex gap-2 items-center">
                         <Select
                             :id="field.name"
                             v-model="formData[field.name]"

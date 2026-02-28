@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
+from oxyde.models import registered_tables
+
 if TYPE_CHECKING:
     from oxyde.models import Model
 
@@ -43,6 +45,10 @@ async def list_records(
     if ordering:
         query = query.order_by(*ordering)
 
+    m2m_fields = _get_m2m_fields(model)
+    if m2m_fields:
+        query = query.prefetch(*m2m_fields)
+
     offset = (page - 1) * per_page
     items = await query.limit(per_page).offset(offset).all()
 
@@ -54,14 +60,29 @@ async def get_record(
     pk: Any,
 ) -> Model:
     name, pk_type = _get_pk_field(model)
-    return await model.objects.get(**{name: pk_type(pk)})
+    m2m_fields = _get_m2m_fields(model)
+    query = model.objects
+    if m2m_fields:
+        query = query.prefetch(*m2m_fields)
+    return await query.filter(**{name: pk_type(pk)}).get()
 
 
 async def create_record(
     model: type[Model],
     data: dict[str, Any],
+    m2m_data: dict[str, list] | None = None,
 ) -> Model:
-    return await model.objects.create(**data)
+    record = await model.objects.create(**data)
+    if m2m_data:
+        await _sync_m2m(model, record, m2m_data)
+        m2m_fields = list(m2m_data.keys())
+        pk_name = _get_pk_field(model)[0]
+        record = (
+            await model.objects.prefetch(*m2m_fields)
+            .filter(**{pk_name: getattr(record, pk_name)})
+            .get()
+        )
+    return record
 
 
 async def update_record(
@@ -69,15 +90,26 @@ async def update_record(
     pk: Any,
     data: dict[str, Any],
     readonly_fields: list[str] | None = None,
+    m2m_data: dict[str, list] | None = None,
 ) -> Model:
     name, pk_type = _get_pk_field(model)
     record = await model.objects.get(**{name: pk_type(pk)})
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
-    for key, value in clean.items():
-        setattr(record, key, value)
-    await record.save(update_fields=set(clean.keys()))
+    if clean:
+        for key, value in clean.items():
+            setattr(record, key, value)
+        await record.save(update_fields=set(clean.keys()))
+    if m2m_data:
+        await _sync_m2m(model, record, m2m_data)
+    m2m_fields = _get_m2m_fields(model)
+    if m2m_fields:
+        record = (
+            await model.objects.prefetch(*m2m_fields)
+            .filter(**{name: pk_type(pk)})
+            .get()
+        )
     return record
 
 
@@ -170,8 +202,6 @@ async def resolve_fk_labels(
     """
     import asyncio
 
-    from oxyde.models.registry import registered_tables
-
     fk_fields = {}
     for name, col in model._db_meta.field_metadata.items():
         if col.foreign_key:
@@ -227,3 +257,61 @@ def _guess_display_field(model: type[Model]) -> str:
         if col.python_type is str:
             return name
     return _get_pk_field(model)[0]
+
+
+def _get_m2m_fields(model: type[Model]) -> list[str]:
+    """Return M2M relation names for the model."""
+    return [
+        name
+        for name, rel in model._db_meta.relations.items()
+        if rel.kind == "many_to_many"
+    ]
+
+
+def _resolve_model_by_name(name: str) -> type[Model]:
+    """Find a model by class name in the registry."""
+    tables = registered_tables()
+    for key, model in tables.items():
+        if key.endswith(f".{name}") or model.__name__ == name:
+            return model
+    raise ValueError(f"Model '{name}' not found in registry")
+
+
+async def _sync_m2m(
+    model: type[Model],
+    record: Any,
+    m2m_data: dict[str, list],
+) -> None:
+    """Sync M2M relations: delete existing junction rows and re-create."""
+    pk_name, _ = _get_pk_field(model)
+    record_pk = getattr(record, pk_name)
+
+    for field_name, target_ids in m2m_data.items():
+        rel = model._db_meta.relations.get(field_name)
+        if rel is None or rel.kind != "many_to_many" or rel.through is None:
+            continue
+
+        through_model = _resolve_model_by_name(rel.through)
+
+        # Find source_fk and target_fk columns in the through model
+        source_fk = None
+        target_fk = None
+        source_key = f".{model.__name__}"
+        target_key = f".{rel.target}"
+
+        for meta in through_model._db_meta.field_metadata.values():
+            if meta.foreign_key:
+                if meta.foreign_key.target.endswith(source_key):
+                    source_fk = meta.name
+                elif meta.foreign_key.target.endswith(target_key):
+                    target_fk = meta.name
+
+        if source_fk is None or target_fk is None:
+            continue
+
+        # Delete existing junction rows for this record
+        await through_model.objects.filter(**{source_fk: record_pk}).delete()
+
+        # Re-create junction rows
+        for tid in target_ids:
+            await through_model.objects.create(**{source_fk: record_pk, target_fk: tid})

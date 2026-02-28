@@ -53,6 +53,7 @@ def _make_objects_mock():
     qm.order_by.return_value = qm
     qm.limit.return_value = qm
     qm.offset.return_value = qm
+    qm.prefetch.return_value = qm
     return qm
 
 
@@ -61,9 +62,12 @@ def _make_mock_model(
     table_name: str,
     fields: dict[str, _ColumnMeta],
     schema: dict,
+    relations: dict | None = None,
 ):
     """Build a mock Model class with _db_meta, model_json_schema, objects."""
-    meta = SimpleNamespace(table_name=table_name, field_metadata=fields)
+    meta = SimpleNamespace(
+        table_name=table_name, field_metadata=fields, relations=relations or {}
+    )
     objects = _make_objects_mock()
 
     cls = type(

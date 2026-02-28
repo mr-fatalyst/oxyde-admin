@@ -54,6 +54,22 @@ def build_schema(model: type[Model]) -> dict[str, Any]:
         if col.comment is not None:
             prop["x-db-comment"] = col.comment
 
+    # M2M relations
+    fk_table_map_rev = {
+        model.__name__: model._db_meta.table_name
+        for model in registered_tables().values()
+        if model._db_meta.table_name
+    }
+    for rel_name, rel in model._db_meta.relations.items():
+        if rel.kind != "many_to_many":
+            continue
+        prop = properties.get(rel_name)
+        if prop is None:
+            continue
+        prop["x-db-m2m"] = True
+        prop["x-db-target"] = fk_table_map_rev.get(rel.target, rel.target)
+        prop["x-db-through"] = rel.through
+
     return schema
 
 

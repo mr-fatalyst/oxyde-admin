@@ -80,6 +80,7 @@ function extractFkColumns(schema) {
 function colType(col) {
     const prop = colProps.value[col];
     if (!prop) return 'default';
+    if (prop['x-db-m2m']) return 'm2m';
     if (prop['x-db-primary-key']) return 'pk';
     if (fkModels.value[col]) return 'fk';
     if (prop.type === 'boolean') return 'boolean';
@@ -146,6 +147,7 @@ function buildBulkFields(schema, labels, roFields) {
     const result = [];
 
     for (const [name, prop] of Object.entries(props)) {
+        if (prop['x-db-m2m']) continue;
         if (hasRef(prop)) continue;
         const isPk = !!prop['x-db-primary-key'];
         if (isPk) continue;
@@ -581,6 +583,17 @@ onMounted(async () => {
                 <template #body="{ data }">
                     <!-- null -->
                     <span v-if="data[col] == null" class="text-surface-400 italic">NULL</span>
+
+                    <!-- M2M -->
+                    <div v-else-if="colType(col) === 'm2m'" class="flex flex-wrap gap-1">
+                        <Tag
+                            v-for="(item, idx) in (Array.isArray(data[col]) ? data[col] : [])"
+                            :key="idx"
+                            :value="typeof item === 'object' ? (item.name || item.title || item.label || Object.values(item)[1] || Object.values(item)[0]) : item"
+                            severity="info"
+                            class="text-xs"
+                        />
+                    </div>
 
                     <!-- PK -->
                     <router-link
