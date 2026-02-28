@@ -16,14 +16,14 @@
 
 ## Features
 
-- **Automatic CRUD** -list, create, edit, delete from your Oxyde models
-- **Search & filters** -text search across fields, column filters (FK, bool, string)
-- **Foreign key handling** -select dropdowns with inline create dialog
-- **Export** -CSV and JSON export with applied filters
-- **Authentication** -pluggable auth via callback, JWT-ready
-- **Theming** -3 presets, 17 colors, 8 surface palettes
-- **Bulk operations** -bulk delete and update from list view
-- **Multi-framework** -FastAPI, Litestar and Sanic adapters
+- **Automatic CRUD** - list, create, edit, delete from your Oxyde models
+- **Search & filters** - text search across fields, column filters (FK, bool, string)
+- **Foreign key handling** - select dropdowns with inline create dialog
+- **Export** - CSV and JSON export with applied filters
+- **Authentication** - pluggable auth via callback, JWT-ready
+- **Theming** - 3 presets, 17 colors, 8 surface palettes
+- **Bulk operations** - bulk delete and update from list view
+- **Multi-framework** - FastAPI, Litestar, Sanic, Quart and Falcon adapters
 
 ![oxyde-admin list view](https://raw.githubusercontent.com/mr-fatalyst/oxyde-admin/main/images/screenshot-list.png)
 
@@ -95,6 +95,32 @@ admin = SanicAdmin(title="My Admin")
 app = Sanic("MyApp")
 admin.register_exception_handlers(app)
 app.blueprint(admin.blueprint)
+```
+
+### Quart
+
+```python
+from quart import Quart
+from oxyde_admin import QuartAdmin
+
+admin = QuartAdmin(title="My Admin")
+# register models...
+
+app = Quart(__name__)
+admin.init_app(app)
+```
+
+### Falcon
+
+```python
+import falcon.asgi
+from oxyde_admin import FalconAdmin
+
+admin = FalconAdmin(title="My Admin")
+# register models...
+
+app = falcon.asgi.App()
+admin.init_app(app)
 ```
 
 ## Model registration

@@ -76,15 +76,18 @@ class AdminSite:
         if model in self._registry:
             raise ValueError(f"{model.__name__} is already registered")
         self._registry[model] = ModelAdmin(**kwargs)
+        self._table_index = None
 
     def register_all(self, *, exclude: set[type[Model]] | None = None) -> None:
         exclude = exclude or set()
         for model in iter_tables():
             if model not in exclude and model not in self._registry:
                 self._registry[model] = ModelAdmin()
+        self._table_index = None
 
     def exclude(self, model: type[Model]) -> None:
         self._registry.pop(model, None)
+        self._table_index = None
 
     @property
     def models(self) -> dict[type[Model], ModelAdmin]:
