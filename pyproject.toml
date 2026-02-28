@@ -41,6 +41,7 @@ dev = [
     "fastapi",
     "litestar",
     "sanic",
+    "quart",
     "uvicorn",
     "pyjwt",
 ]

@@ -196,6 +196,8 @@ oxyde_admin/static/
 
 # SQLite
 *.db
+*.db-shm
+*.db-wal
 
 # Ruff stuff:
 .ruff_cache/

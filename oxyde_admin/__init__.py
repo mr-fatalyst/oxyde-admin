@@ -28,6 +28,11 @@ try:
 except ImportError:
     SanicAdmin = _make_stub("SanicAdmin", "sanic")
 
+try:
+    from oxyde_admin.adapters._quart import QuartAdmin
+except ImportError:
+    QuartAdmin = _make_stub("QuartAdmin", "quart")
+
 
 __all__ = [
     "__version__",
@@ -37,4 +42,5 @@ __all__ = [
     "FastAPIAdmin",
     "LitestarAdmin",
     "SanicAdmin",
+    "QuartAdmin",
 ]

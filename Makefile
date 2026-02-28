@@ -1,4 +1,4 @@
-.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic
+.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic run-quart fixture-quart
 
 VENV = .venv/bin
 
@@ -31,3 +31,9 @@ run-sanic:
 
 fixture-sanic:
 	cd examples/sanic_example && ../../$(VENV)/python fixture.py
+
+run-quart:
+	cd examples/quart_example && ../../$(VENV)/hypercorn app:app --reload --bind 0.0.0.0:8000
+
+fixture-quart:
+	cd examples/quart_example && ../../$(VENV)/python fixture.py
