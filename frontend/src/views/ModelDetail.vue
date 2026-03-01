@@ -302,17 +302,6 @@ async function save(andContinue = false) {
             body: JSON.stringify(buildPayload()),
         });
 
-        if (res.status === 422) {
-            parseValidationErrors(await res.json());
-            return;
-        }
-
-        if (!res.ok) {
-            const data = await res.json();
-            toast.add({ severity: 'error', summary: 'Error', detail: data.detail || 'Unknown error', life: 5000 });
-            return;
-        }
-
         const record = await res.json();
         toast.add({ severity: 'success', summary: 'Saved', detail: `${schema.value.title} saved`, life: 3000 });
 
@@ -331,6 +320,10 @@ async function save(andContinue = false) {
             navigatingAfterSave.value = false;
         } else {
             router.push(`/${modelName.value}`);
+        }
+    } catch (e) {
+        if (e.status === 422) {
+            parseValidationErrors(await e.response.json());
         }
     } finally {
         saving.value = false;
@@ -353,15 +346,12 @@ function confirmDelete() {
 async function deleteRecord() {
     deleting.value = true;
     try {
-        const res = await api(`/api/${modelName.value}/${pk.value}`, { method: 'DELETE' });
-        if (!res.ok) {
-            const data = await res.json();
-            toast.add({ severity: 'error', summary: 'Error', detail: data.detail || 'Delete failed', life: 5000 });
-            return;
-        }
+        await api(`/api/${modelName.value}/${pk.value}`, { method: 'DELETE' });
         toast.add({ severity: 'success', summary: 'Deleted', detail: `${schema.value.title} deleted`, life: 3000 });
         navigatingAfterSave.value = true;
         router.push(`/${modelName.value}`);
+    } catch {
+        // toast already shown by api()
     } finally {
         deleting.value = false;
     }
@@ -451,25 +441,6 @@ async function dlgSave() {
             body: JSON.stringify(payload),
         });
 
-        if (res.status === 422) {
-            const data = await res.json();
-            if (Array.isArray(data.detail)) {
-                const errs = {};
-                for (const err of data.detail) {
-                    const loc = err.loc || [];
-                    errs[loc[loc.length - 1]] = err.msg;
-                }
-                dlgErrors.value = errs;
-            }
-            return;
-        }
-
-        if (!res.ok) {
-            const data = await res.json();
-            toast.add({ severity: 'error', summary: 'Error', detail: data.detail || 'Create failed', life: 5000 });
-            return;
-        }
-
         const record = await res.json();
         toast.add({ severity: 'success', summary: 'Created', detail: `${dlgSchema.value.title} created`, life: 3000 });
 
@@ -482,6 +453,18 @@ async function dlgSave() {
         formData.value[parentField.name] = newPk;
 
         dlgVisible.value = false;
+    } catch (e) {
+        if (e.status === 422) {
+            const data = await e.response.json();
+            if (Array.isArray(data.detail)) {
+                const errs = {};
+                for (const err of data.detail) {
+                    const loc = err.loc || [];
+                    errs[loc[loc.length - 1]] = err.msg;
+                }
+                dlgErrors.value = errs;
+            }
+        }
     } finally {
         dlgSaving.value = false;
     }

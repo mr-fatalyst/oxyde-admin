@@ -25,6 +25,14 @@ const API_PREFIX = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
 
 const TOKEN_KEY = 'admin_token';
 
+export class ApiError extends Error {
+    constructor(message, status, response) {
+        super(message);
+        this.status = status;
+        this.response = response;
+    }
+}
+
 const _errorListeners = [];
 
 export function onApiError(callback) {
@@ -44,7 +52,7 @@ export async function api(path, options = {}) {
             if (router.currentRoute.value.name !== 'login') {
                 router.push('/login');
             }
-            return res;
+            throw new ApiError('Unauthorized', 401, res);
         }
         let message = `${res.status} ${res.statusText}`;
         try {
@@ -55,7 +63,10 @@ export async function api(path, options = {}) {
                     : JSON.stringify(body.detail);
             }
         } catch {}
-        for (const cb of _errorListeners) cb(message, res.status);
+        if (res.status !== 422) {
+            for (const cb of _errorListeners) cb(message, res.status);
+        }
+        throw new ApiError(message, res.status, res);
     }
     return res;
 }

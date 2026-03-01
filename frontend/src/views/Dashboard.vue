@@ -7,33 +7,37 @@ const router = useRouter();
 const groups = ref([]);
 
 onMounted(async () => {
-    const [modelsRes, countsRes] = await Promise.all([
-        api('/api/models'),
-        api('/api/models/counts'),
-    ]);
-    const models = await modelsRes.json();
-    const counts = await countsRes.json();
-    const items = models.map((m) => ({ ...m, total: counts[m.name] || 0 }));
+    try {
+        const [modelsRes, countsRes] = await Promise.all([
+            api('/api/models'),
+            api('/api/models/counts'),
+        ]);
+        const models = await modelsRes.json();
+        const counts = await countsRes.json();
+        const items = models.map((m) => ({ ...m, total: counts[m.name] || 0 }));
 
-    const grouped = {};
-    const ungrouped = [];
-    for (const m of items) {
-        if (m.group) {
-            if (!grouped[m.group]) grouped[m.group] = [];
-            grouped[m.group].push(m);
-        } else {
-            ungrouped.push(m);
+        const grouped = {};
+        const ungrouped = [];
+        for (const m of items) {
+            if (m.group) {
+                if (!grouped[m.group]) grouped[m.group] = [];
+                grouped[m.group].push(m);
+            } else {
+                ungrouped.push(m);
+            }
         }
-    }
 
-    const sections = [];
-    for (const [label, models] of Object.entries(grouped)) {
-        sections.push({ label, models });
+        const sections = [];
+        for (const [label, models] of Object.entries(grouped)) {
+            sections.push({ label, models });
+        }
+        if (ungrouped.length > 0) {
+            sections.push({ label: 'Models', models: ungrouped });
+        }
+        groups.value = sections;
+    } catch {
+        // toast already shown by api()
     }
-    if (ungrouped.length > 0) {
-        sections.push({ label: 'Models', models: ungrouped });
-    }
-    groups.value = sections;
 });
 </script>
 

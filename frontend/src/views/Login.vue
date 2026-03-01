@@ -41,10 +41,12 @@ async function onLogin() {
         const data = await res.json();
         localStorage.setItem('admin_token', data.token);
         // Verify the token actually grants admin access
-        const check = await api('/api/models');
-        if (!check.ok) {
-            localStorage.removeItem('admin_token');
-            toast.add({ severity: 'error', summary: 'Access denied', detail: 'You do not have admin permissions', life: 5000 });
+        try {
+            await api('/api/models');
+        } catch (e) {
+            if (e.status === 401) {
+                toast.add({ severity: 'error', summary: 'Access denied', detail: 'You do not have admin permissions', life: 5000 });
+            }
             return;
         }
         router.push('/');

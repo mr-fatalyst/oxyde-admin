@@ -338,15 +338,18 @@ function buildExportUrl(format) {
 }
 
 async function doExport(format) {
-    const url = buildExportUrl(format);
-    const res = await api(url);
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${modelName.value}.${format}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    try {
+        const url = buildExportUrl(format);
+        const res = await api(url);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${modelName.value}.${format}`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    } catch {
+        // toast already shown by api()
+    }
 }
 
 function exportData(format) {
@@ -416,16 +419,19 @@ function confirmBulkDelete() {
 
 async function doBulkDelete() {
     const ids = selectedRecords.value.map((r) => r[pkFieldName.value]);
-    const res = await api(`/api/${modelName.value}/bulk-delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    toast.add({ severity: 'success', summary: 'Deleted', detail: `${data.deleted} record(s) deleted`, life: 3000 });
-    selectedRecords.value = [];
-    await loadRecords();
+    try {
+        const res = await api(`/api/${modelName.value}/bulk-delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        const data = await res.json();
+        toast.add({ severity: 'success', summary: 'Deleted', detail: `${data.deleted} record(s) deleted`, life: 3000 });
+        selectedRecords.value = [];
+        await loadRecords();
+    } catch {
+        // toast already shown by api()
+    }
 }
 
 // --- Bulk Update Dialog ---
@@ -519,12 +525,13 @@ async function doBulkUpdate() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids, data }),
         });
-        if (!res.ok) return;
         const result = await res.json();
         toast.add({ severity: 'success', summary: 'Updated', detail: `${result.updated} record(s) updated`, life: 3000 });
         bulkDlgVisible.value = false;
         selectedRecords.value = [];
         await loadRecords();
+    } catch {
+        // toast already shown by api()
     } finally {
         bulkSaving.value = false;
     }
