@@ -98,8 +98,9 @@ async def update_record(
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
     if clean:
-        for key, value in clean.items():
-            setattr(record, key, value)
+        validated = model.model_validate({**record.model_dump(), **clean})
+        for key in clean:
+            setattr(record, key, getattr(validated, key))
         await record.save(update_fields=set(clean.keys()))
     if m2m_data:
         await _sync_m2m(model, record, m2m_data)

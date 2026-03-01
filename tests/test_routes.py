@@ -11,6 +11,7 @@ from oxyde_admin.api.routes import update_record
 class TestUpdateRecord:
     async def test_update_record_filters_readonly(self, MockUser):
         record = MagicMock()
+        record.model_dump.return_value = {}
         record.save = AsyncMock()
         MockUser.objects.get = AsyncMock(return_value=record)
 
@@ -32,6 +33,7 @@ class TestUpdateRecord:
 
     async def test_update_record_filters_pk(self, MockUser):
         record = MagicMock()
+        record.model_dump.return_value = {}
         record.save = AsyncMock()
         MockUser.objects.get = AsyncMock(return_value=record)
 
@@ -44,6 +46,7 @@ class TestUpdateRecord:
 
     async def test_update_record_no_readonly(self, MockUser):
         record = MagicMock()
+        record.model_dump.return_value = {}
         record.save = AsyncMock()
         MockUser.objects.get = AsyncMock(return_value=record)
 

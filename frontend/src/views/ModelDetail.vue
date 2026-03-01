@@ -4,7 +4,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
-import { findPk } from '@/utils.js';
+import { findPk, serializeDate, resolveType, hasRef, resolveFormat, extractFkMap, componentType } from '@/utils.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -39,44 +39,6 @@ const dlgFkOptions = ref({});
 const dlgSaving = ref(false);
 
 // --- Schema parsing ---
-
-function resolveType(prop) {
-    if (prop.type) return prop.type;
-    if (prop.anyOf) {
-        const nonNull = prop.anyOf.find((t) => t.type && t.type !== 'null');
-        if (nonNull) return nonNull.type;
-    }
-    return 'string';
-}
-
-function hasRef(prop) {
-    if (prop.$ref) return true;
-    if (prop.anyOf) return prop.anyOf.some((t) => t.$ref);
-    return false;
-}
-
-function extractFkMap(schemaData) {
-    const map = {};
-    const props = schemaData.properties || {};
-    for (const [, prop] of Object.entries(props)) {
-        if (!hasRef(prop)) continue;
-        const fk = prop['x-db-foreign-key'];
-        const col = prop['x-db-column'];
-        if (fk && col) {
-            map[col] = fk;
-        }
-    }
-    return map;
-}
-
-function resolveFormat(prop) {
-    if (prop.format) return prop.format;
-    if (prop.anyOf) {
-        const nonNull = prop.anyOf.find((t) => t.format);
-        if (nonNull) return nonNull.format;
-    }
-    return null;
-}
 
 function buildFields(schemaData, labels, roFields) {
     const props = schemaData.properties || {};
@@ -144,17 +106,6 @@ const dlgVisibleFields = computed(() => {
     return dlgFields.value.filter((f) => !f.isPk);
 });
 
-function componentType(field) {
-    if (field.m2m) return 'multiselect';
-    if (field.fk) return 'select';
-    if (field.type === 'boolean') return 'boolean';
-    if (field.type === 'integer' || field.type === 'number') return 'number';
-    if (field.format === 'date-time') return 'datetime';
-    if (field.format === 'date') return 'date';
-    if (field.type === 'string' && !field.maxLength && (!field.dbType || field.dbType.toUpperCase() === 'TEXT')) return 'textarea';
-    return 'text';
-}
-
 function initFormData(fieldList, record) {
     const data = {};
     for (const f of fieldList) {
@@ -197,7 +148,7 @@ function buildPayload() {
             continue;
         }
         if (val instanceof Date) {
-            val = val.toISOString();
+            val = serializeDate(val, f.format);
         }
         payload[f.name] = val;
     }

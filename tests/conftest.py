@@ -78,6 +78,7 @@ def _make_mock_model(
             "_db_meta": meta,
             "objects": objects,
             "model_json_schema": classmethod(lambda cls_: schema),
+            "model_validate": classmethod(lambda cls_, data: SimpleNamespace(**data)),
             "ensure_field_metadata": classmethod(lambda cls_: None),
         },
     )
