@@ -147,7 +147,20 @@ function buildBulkFields(schema, labels, roFields) {
     const result = [];
 
     for (const [name, prop] of Object.entries(props)) {
-        if (prop['x-db-m2m']) continue;
+        if (prop['x-db-m2m']) {
+            result.push({
+                name,
+                label: (labels && labels[name]) || prop.title || name,
+                type: 'array',
+                format: null,
+                dbType: null,
+                isReadonly: roSet.has(name),
+                maxLength: null,
+                fk: null,
+                m2m: { target: prop['x-db-target'], through: prop['x-db-through'] },
+            });
+            continue;
+        }
         if (hasRef(prop)) continue;
         const isPk = !!prop['x-db-primary-key'];
         if (isPk) continue;
@@ -162,12 +175,14 @@ function buildBulkFields(schema, labels, roFields) {
             isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
             fk,
+            m2m: null,
         });
     }
     return result;
 }
 
 function componentType(field) {
+    if (field.m2m) return 'multiselect';
     if (field.fk) return 'select';
     if (field.type === 'boolean') return 'boolean';
     if (field.type === 'integer' || field.type === 'number') return 'number';
@@ -422,7 +437,8 @@ function openBulkUpdate() {
     const enabledInit = {};
     for (const f of bulkFields.value) {
         const ct = componentType(f);
-        if (ct === 'boolean') formInit[f.name] = false;
+        if (ct === 'multiselect') formInit[f.name] = [];
+        else if (ct === 'boolean') formInit[f.name] = false;
         else if (ct === 'number') formInit[f.name] = 0;
         else if (ct === 'text') formInit[f.name] = '';
         else formInit[f.name] = null;
@@ -441,6 +457,14 @@ function openBulkUpdate() {
         });
     }
 
+    // Load M2M options
+    const m2mFields = bulkFields.value.filter((f) => f.m2m);
+    for (const f of m2mFields) {
+        api(`/api/${f.m2m.target}/options`).then((r) => r.json()).then((opts) => {
+            bulkFkOptions.value[f.name] = opts;
+        });
+    }
+
     bulkDlgVisible.value = true;
 }
 
@@ -452,6 +476,19 @@ function onBulkFkSearch(field, event) {
         const url = query
             ? `/api/${field.fk.model}/options?search=${encodeURIComponent(query)}`
             : `/api/${field.fk.model}/options`;
+        const res = await api(url);
+        bulkFkOptions.value[field.name] = await res.json();
+    }, 300);
+}
+
+let bulkM2mFilterTimeout = null;
+function onBulkM2mFilter(field, event) {
+    clearTimeout(bulkM2mFilterTimeout);
+    const query = event.value;
+    bulkM2mFilterTimeout = setTimeout(async () => {
+        const url = query
+            ? `/api/${field.m2m.target}/options?search=${encodeURIComponent(query)}`
+            : `/api/${field.m2m.target}/options`;
         const res = await api(url);
         bulkFkOptions.value[field.name] = await res.json();
     }, 300);
@@ -656,9 +693,24 @@ onMounted(async () => {
                         <Tag v-if="field.isReadonly" value="readonly" severity="secondary" class="text-xs" />
                     </div>
 
+                    <!-- M2M MultiSelect -->
+                    <MultiSelect
+                        v-if="componentType(field) === 'multiselect'"
+                        v-model="bulkFormData[field.name]"
+                        :options="bulkFkOptions[field.name] || []"
+                        optionLabel="label"
+                        optionValue="value"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        display="chip"
+                        filter
+                        @filter="onBulkM2mFilter(field, $event)"
+                        placeholder="Select..."
+                        fluid
+                    />
+
                     <!-- FK Select -->
                     <Select
-                        v-if="componentType(field) === 'select'"
+                        v-else-if="componentType(field) === 'select'"
                         v-model="bulkFormData[field.name]"
                         :options="bulkFkOptions[field.name] || []"
                         optionLabel="label"

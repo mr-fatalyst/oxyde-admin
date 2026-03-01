@@ -327,11 +327,13 @@ class AdminSite:
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
+        clean, m2m_data = self._extract_m2m(model, data)
         count = await bulk_update(
             model,
             ids,
-            data,
+            clean,
             readonly_fields=config.readonly_fields if config else None,
+            m2m_data=m2m_data,
         )
         return {"updated": count}
 

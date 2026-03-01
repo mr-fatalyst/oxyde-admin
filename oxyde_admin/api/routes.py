@@ -135,16 +135,22 @@ async def bulk_update(
     ids: list[Any],
     data: dict[str, Any],
     readonly_fields: list[str] | None = None,
+    m2m_data: dict[str, list] | None = None,
 ) -> int:
     name, pk_type = _get_pk_field(model)
     typed_ids = [pk_type(i) for i in ids]
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
-    if not clean:
-        return 0
-    rows = await model.objects.filter(**{f"{name}__in": typed_ids}).update(**clean)
-    return len(rows)
+    count = 0
+    if clean:
+        rows = await model.objects.filter(**{f"{name}__in": typed_ids}).update(**clean)
+        count = len(rows)
+    if m2m_data:
+        await _sync_m2m_bulk(model, typed_ids, m2m_data)
+        if not count:
+            count = len(typed_ids)
+    return count
 
 
 async def get_options(
@@ -277,6 +283,41 @@ def _resolve_model_by_name(name: str) -> type[Model]:
     raise ValueError(f"Model '{name}' not found in registry")
 
 
+async def _sync_m2m_bulk(
+    model: type[Model],
+    record_pks: list,
+    m2m_data: dict[str, list],
+) -> None:
+    """Sync M2M relations for multiple records: bulk delete + bulk create."""
+    for field_name, target_ids in m2m_data.items():
+        rel = model._db_meta.relations.get(field_name)
+        if rel is None or rel.kind != "many_to_many" or rel.through is None:
+            continue
+
+        through_model = _resolve_model_by_name(rel.through)
+
+        source_fk = None
+        target_fk = None
+        source_key = f".{model.__name__}"
+        target_key = f".{rel.target}"
+
+        for meta in through_model._db_meta.field_metadata.values():
+            if meta.foreign_key:
+                if meta.foreign_key.target.endswith(source_key):
+                    source_fk = meta.db_column
+                elif meta.foreign_key.target.endswith(target_key):
+                    target_fk = meta.db_column
+
+        if source_fk is None or target_fk is None:
+            continue
+
+        await through_model.objects.filter(**{f"{source_fk}__in": record_pks}).delete()
+
+        for rpk in record_pks:
+            for tid in target_ids:
+                await through_model.objects.create(**{source_fk: rpk, target_fk: tid})
+
+
 async def _sync_m2m(
     model: type[Model],
     record: Any,
@@ -302,9 +343,9 @@ async def _sync_m2m(
         for meta in through_model._db_meta.field_metadata.values():
             if meta.foreign_key:
                 if meta.foreign_key.target.endswith(source_key):
-                    source_fk = meta.name
+                    source_fk = meta.db_column
                 elif meta.foreign_key.target.endswith(target_key):
-                    target_fk = meta.name
+                    target_fk = meta.db_column
 
         if source_fk is None or target_fk is None:
             continue
