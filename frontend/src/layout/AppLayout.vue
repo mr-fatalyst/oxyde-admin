@@ -1,7 +1,7 @@
 <script setup>
 import { useLayout } from '@/layout/composables/layout';
 import { useToast } from 'primevue/usetoast';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, onApiError } from '@/api.js';
 import AppFooter from './AppFooter.vue';
@@ -11,9 +11,10 @@ import AppTopbar from './AppTopbar.vue';
 const { layoutConfig, layoutState, hideMobileMenu } = useLayout();
 const toast = useToast();
 
-onApiError((message, status) => {
+const unsubApiError = onApiError((message, status) => {
     toast.add({ severity: 'error', summary: `Error ${status}`, detail: message, life: 5000 });
 });
+onUnmounted(unsubApiError);
 const route = useRoute();
 
 const modelsData = ref([]);

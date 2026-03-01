@@ -248,7 +248,7 @@ async function save(andContinue = false) {
             : `/api/${modelName.value}/${pk.value}`;
 
         const res = await api(url, {
-            method: isCreate.value ? 'POST' : 'PUT',
+            method: isCreate.value ? 'POST' : 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(buildPayload()),
         });

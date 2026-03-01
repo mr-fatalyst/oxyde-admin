@@ -149,7 +149,7 @@ class FastAPIAdmin(AbstractAdapter):
             data = await request.json()
             return await self._handle_create(model_name, data)
 
-        @app.put("/api/{model_name}/{pk}", response_model=None)
+        @app.patch("/api/{model_name}/{pk}", response_model=None)
         async def model_update(model_name: str, pk: str, request: Request):
             data = await request.json()
             return await self._handle_update(model_name, pk, data)

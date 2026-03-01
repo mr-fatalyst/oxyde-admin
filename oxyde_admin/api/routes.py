@@ -70,9 +70,14 @@ async def get_record(
 async def create_record(
     model: type[Model],
     data: dict[str, Any],
+    readonly_fields: list[str] | None = None,
     m2m_data: dict[str, list] | None = None,
 ) -> Model:
-    record = await model.objects.create(**data)
+    name, _ = _get_pk_field(model)
+    blocked = set(readonly_fields or [])
+    blocked.add(name)
+    clean = {k: v for k, v in data.items() if k not in blocked}
+    record = await model.objects.create(**clean)
     if m2m_data:
         await _sync_m2m(model, record, m2m_data)
         m2m_fields = list(m2m_data.keys())

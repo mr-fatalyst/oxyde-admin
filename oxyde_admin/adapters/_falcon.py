@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import datetime as _dt
 import inspect
 import json as _json
 import mimetypes
@@ -8,18 +7,12 @@ import mimetypes
 import falcon
 import falcon.asgi
 
-from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
-
-
-def _json_default(obj):
-    if isinstance(obj, (_dt.datetime, _dt.date)):
-        return obj.isoformat()
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR, json_default
 
 
 def _set_json(resp, body, status=200):
     """Set a JSON response with datetime-aware serialization."""
-    resp.text = _json.dumps(body, default=_json_default)
+    resp.text = _json.dumps(body, default=json_default)
     resp.content_type = falcon.MEDIA_JSON
     resp.status = status
 
@@ -124,7 +117,7 @@ class ModelItemResource:
     async def on_get(self, req, resp, model_name, pk):
         _set_json(resp, await self.admin._handle_get(model_name, pk))
 
-    async def on_put(self, req, resp, model_name, pk):
+    async def on_patch(self, req, resp, model_name, pk):
         data = await req.get_media()
         _set_json(resp, await self.admin._handle_update(model_name, pk, data))
 

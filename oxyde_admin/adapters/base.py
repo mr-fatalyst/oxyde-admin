@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as _dt
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,13 @@ from oxyde_admin.site import (
 )
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+
+def json_default(obj):
+    """JSON serializer for datetime objects. Shared across adapters."""
+    if isinstance(obj, (_dt.datetime, _dt.date)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 class AbstractAdapter(AdminSite, ABC):

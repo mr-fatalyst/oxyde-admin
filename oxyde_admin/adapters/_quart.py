@@ -1,24 +1,17 @@
 from __future__ import annotations
 
-import datetime as _dt
 import inspect
 import json as _json
 import mimetypes
 
 from quart import Quart, Blueprint, request, Response
 
-from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
-
-
-def _json_default(obj):
-    if isinstance(obj, (_dt.datetime, _dt.date)):
-        return obj.isoformat()
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR, json_default
 
 
 def _json_response(body, status=200, headers=None):
     """Build a JSON response with datetime-aware serialization."""
-    data = _json.dumps(body, default=_json_default)
+    data = _json.dumps(body, default=json_default)
     resp = Response(data, status=status, content_type="application/json")
     if headers:
         for k, v in headers.items():
@@ -223,7 +216,7 @@ class QuartAdmin(AbstractAdapter):
                 await admin._handle_create(model_name, data), status=201
             )
 
-        @bp.put("/api/<model_name>/<pk>")
+        @bp.patch("/api/<model_name>/<pk>")
         async def model_update(model_name: str, pk: str):
             data = await request.get_json()
             return _json_response(await admin._handle_update(model_name, pk, data))

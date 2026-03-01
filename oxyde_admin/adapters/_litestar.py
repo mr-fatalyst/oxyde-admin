@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 
-from litestar import Litestar, Request, get, post, put, delete
+from litestar import Litestar, Request, get, post, patch, delete
 from litestar.params import Parameter
 from litestar.static_files import StaticFilesConfig
 from litestar.openapi import OpenAPIConfig
@@ -209,7 +209,7 @@ class LitestarAdmin(AbstractAdapter):
         async def model_create(model_name: str, data: dict) -> dict:
             return await admin._handle_create(model_name, data)
 
-        @put("/api/{model_name:str}/{pk:str}")
+        @patch("/api/{model_name:str}/{pk:str}")
         async def model_update(model_name: str, pk: str, data: dict) -> dict:
             return await admin._handle_update(model_name, pk, data)
 

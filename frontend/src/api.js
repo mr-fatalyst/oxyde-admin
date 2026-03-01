@@ -37,6 +37,10 @@ const _errorListeners = [];
 
 export function onApiError(callback) {
     _errorListeners.push(callback);
+    return () => {
+        const idx = _errorListeners.indexOf(callback);
+        if (idx !== -1) _errorListeners.splice(idx, 1);
+    };
 }
 
 export async function api(path, options = {}) {

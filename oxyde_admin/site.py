@@ -286,7 +286,13 @@ class AdminSite:
 
         model = self._require_model(model_name)
         clean, m2m_data = self._extract_m2m(model, data)
-        record = await create_record(model, clean, m2m_data=m2m_data)
+        config = self._registry.get(model)
+        record = await create_record(
+            model,
+            clean,
+            readonly_fields=config.readonly_fields if config else None,
+            m2m_data=m2m_data,
+        )
         return record.model_dump()
 
     async def _handle_update(

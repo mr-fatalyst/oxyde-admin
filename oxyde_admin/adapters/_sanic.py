@@ -1,24 +1,17 @@
 from __future__ import annotations
 
-import datetime as _dt
 import inspect
 import mimetypes
 
 from sanic import Sanic, Request, Blueprint, json as _json_response, html, raw
 from sanic.exceptions import NotFound
 
-from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
-
-
-def _json_default(obj):
-    if isinstance(obj, (_dt.datetime, _dt.date)):
-        return obj.isoformat()
-    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR, json_default
 
 
 def json(body, **kwargs):
     """Wrapper around ``sanic.json`` with datetime-aware serialization."""
-    kwargs.setdefault("default", _json_default)
+    kwargs.setdefault("default", json_default)
     return _json_response(body, **kwargs)
 
 
@@ -224,7 +217,7 @@ class SanicAdmin(AbstractAdapter):
             data = request.json
             return json(await admin._handle_create(model_name, data), status=201)
 
-        @bp.put("/api/<model_name:str>/<pk:str>")
+        @bp.patch("/api/<model_name:str>/<pk:str>")
         async def model_update(request: Request, model_name: str, pk: str):
             data = request.json
             return json(await admin._handle_update(model_name, pk, data))
