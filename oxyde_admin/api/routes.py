@@ -150,8 +150,7 @@ async def bulk_update(
     clean = {k: v for k, v in data.items() if k not in blocked}
     count = 0
     if clean:
-        rows = await model.objects.filter(**{f"{name}__in": typed_ids}).update(**clean)
-        count = len(rows)
+        count = await model.objects.filter(**{f"{name}__in": typed_ids}).update(**clean)
     if m2m_data:
         await _sync_m2m_bulk(model, typed_ids, m2m_data)
         if not count:

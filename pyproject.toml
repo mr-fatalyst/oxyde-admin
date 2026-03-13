@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oxyde-admin"
-version = "0.2.0"
+version = "0.3.0"
 description = "Admin interface for Oxyde ORM"
 readme = "README.md"
 license = {text = "MIT"}
@@ -31,7 +31,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "oxyde>=0.4.0",
+    "oxyde>=0.5.0",
 ]
 
 [project.optional-dependencies]
