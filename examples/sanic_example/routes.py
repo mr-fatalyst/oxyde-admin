@@ -8,7 +8,7 @@ bp = Blueprint("blog", url_prefix="/api")
 
 @bp.get("/posts/")
 async def list_posts(request):
-    posts = await Post.objects.filter(is_published=True).all()
+    posts = await Post.objects.filter(status="published").all()
     return json(
         [
             {"id": p.id, "title": p.title, "slug": p.slug, "views": p.views}

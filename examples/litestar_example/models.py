@@ -1,7 +1,15 @@
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
 from oxyde import Model, Field
+
+
+class PostStatus(str, Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    ARCHIVED = "archived"
+
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_URL = f"sqlite:///{BASE_DIR / 'example.db'}"
@@ -46,7 +54,7 @@ class Post(Model):
     views: int = 0
     author: User | None = Field(default=None, db_on_delete="CASCADE")
     category: Category | None = Field(default=None, db_on_delete="SET NULL")
-    is_published: bool = True
+    status: PostStatus = PostStatus.PUBLISHED
     created_at: datetime | None = Field(default=None, db_default="CURRENT_TIMESTAMP")
     updated_at: datetime | None = Field(default=None, db_default="CURRENT_TIMESTAMP")
     tags: list[Tag] = Field(default=[], db_m2m=True, db_through="PostTag")

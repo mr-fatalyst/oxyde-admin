@@ -4,7 +4,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
-import { findPk, serializeDate, resolveType, hasRef, resolveFormat, extractFkMap, componentType } from '@/utils.js';
+import { findPk, serializeDate, resolveType, hasRef, resolveFormat, resolveEnum, extractFkMap, componentType } from '@/utils.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -82,6 +82,7 @@ function buildFields(schemaData, labels, roFields) {
             isRequired: required.has(name),
             default: prop.default ?? null,
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
+            enum: resolveEnum(prop),
             fk,
             m2m: null,
         });
@@ -479,6 +480,19 @@ onMounted(async () => {
                         fluid
                     />
 
+                    <!-- Enum Select -->
+                    <Select
+                        v-else-if="componentType(field) === 'enum'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :options="field.enum"
+                        :showClear="!field.isRequired"
+                        placeholder="Select..."
+                        :disabled="field.isReadonly"
+                        :invalid="!!errors[field.name]"
+                        fluid
+                    />
+
                     <!-- FK Select -->
                     <div v-else-if="componentType(field) === 'select'" class="flex gap-2 items-center">
                         <Select
@@ -631,7 +645,18 @@ onMounted(async () => {
                     </label>
 
                     <Select
-                        v-if="componentType(field) === 'select'"
+                        v-if="componentType(field) === 'enum'"
+                        :id="'dlg-' + field.name"
+                        v-model="dlgFormData[field.name]"
+                        :options="field.enum"
+                        :showClear="!field.isRequired"
+                        placeholder="Select..."
+                        :invalid="!!dlgErrors[field.name]"
+                        fluid
+                    />
+
+                    <Select
+                        v-else-if="componentType(field) === 'select'"
                         :id="'dlg-' + field.name"
                         v-model="dlgFormData[field.name]"
                         :options="dlgFkOptions[field.name] || []"

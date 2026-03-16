@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { api } from '@/api.js';
-import { serializeDate, resolveType, hasRef, resolveFormat, extractFkMap, componentType } from '@/utils.js';
+import { serializeDate, resolveType, hasRef, resolveFormat, resolveEnum, extractFkMap, componentType } from '@/utils.js';
 
 const appConfig = inject('appConfig', {});
 
@@ -83,6 +83,7 @@ function colType(col) {
     if (prop['x-db-m2m']) return 'm2m';
     if (prop['x-db-primary-key']) return 'pk';
     if (fkModels.value[col]) return 'fk';
+    if (resolveEnum(prop)) return 'enum';
     if (prop.type === 'boolean') return 'boolean';
     if (prop.anyOf && prop.anyOf.some((t) => t.type === 'boolean')) return 'boolean';
     const dbType = (prop['x-db-type'] || '').toLowerCase();
@@ -134,6 +135,7 @@ function buildBulkFields(schema, labels, roFields) {
             dbType: prop['x-db-type'] || null,
             isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
+            enum: resolveEnum(prop),
             fk,
             m2m: null,
         });
@@ -199,6 +201,9 @@ async function loadMeta() {
                     })
                 );
             }
+        } else if (type === 'enum') {
+            const enumVals = resolveEnum(colProps.value[col]);
+            fMeta[col] = { type: 'enum', options: enumVals || [] };
         } else if (type === 'boolean') {
             fMeta[col] = { type: 'boolean' };
         } else {
@@ -552,6 +557,16 @@ onMounted(async () => {
                         showClear
                         class="w-full"
                     />
+                    <!-- Enum filter -->
+                    <Select
+                        v-else-if="filterMeta[col].type === 'enum'"
+                        v-model="filterModel.value"
+                        @update:modelValue="filterCallback()"
+                        :options="filterMeta[col].options"
+                        :placeholder="colLabel(col)"
+                        showClear
+                        class="w-full"
+                    />
                     <!-- Boolean filter -->
                     <Select
                         v-else-if="filterMeta[col].type === 'boolean'"
@@ -661,6 +676,17 @@ onMounted(async () => {
                         filter
                         @filter="onBulkM2mFilter(field, $event)"
                         placeholder="Select..."
+                        fluid
+                    />
+
+                    <!-- Enum Select -->
+                    <Select
+                        v-else-if="componentType(field) === 'enum'"
+                        v-model="bulkFormData[field.name]"
+                        :options="field.enum"
+                        showClear
+                        placeholder="Select..."
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
                         fluid
                     />
 

@@ -180,7 +180,7 @@ async def main():
             views INTEGER NOT NULL DEFAULT 0,
             author_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
             category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
-            is_published BOOLEAN NOT NULL DEFAULT 1,
+            status TEXT NOT NULL DEFAULT 'published',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -249,7 +249,7 @@ async def main():
             views=views,
             author_id=author.id,
             category_id=category.id,
-            is_published=True,
+            status="published",
         )
         posts.append(post)
 
@@ -257,7 +257,7 @@ async def main():
         author = random.choice(users)
         category = random.choice(categories)
         views = random.randint(0, 2000)
-        published = random.random() > 0.2
+        status = random.choice(["published", "draft", "archived"])
         post = await Post.objects.create(
             title=title,
             slug=slugify(title),
@@ -265,7 +265,7 @@ async def main():
             views=views,
             author_id=author.id,
             category_id=category.id,
-            is_published=published,
+            status=status,
         )
         posts.append(post)
 

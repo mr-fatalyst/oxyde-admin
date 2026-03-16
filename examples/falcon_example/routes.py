@@ -5,7 +5,7 @@ from models import Post, Comment
 
 class PostsResource:
     async def on_get(self, req, resp):
-        posts = await Post.objects.filter(is_published=True).all()
+        posts = await Post.objects.filter(status="published").all()
         resp.media = [
             {"id": p.id, "title": p.title, "slug": p.slug, "views": p.views}
             for p in posts

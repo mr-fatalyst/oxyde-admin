@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 def build_schema(model: type[Model]) -> dict[str, Any]:
     """Build JSON Schema enriched with ``x-db-*`` extensions from ``_db_meta``."""
     schema = model.model_json_schema()
+    _resolve_enum_refs(schema)
     properties = schema.get("properties", {})
     fk_table_map = _build_fk_table_map()
 
@@ -71,6 +72,36 @@ def build_schema(model: type[Model]) -> dict[str, Any]:
         prop["x-db-through"] = rel.through
 
     return schema
+
+
+def _resolve_enum_refs(schema: dict[str, Any]) -> None:
+    """Inline enum ``$ref`` definitions into properties.
+
+    Pydantic emits ``$ref`` for both FK models and Enum types.  The frontend
+    skips every ``$ref`` property assuming it is a FK.  By inlining enum
+    definitions we make them look like regular typed properties with an
+    ``enum`` list so the frontend can render a dropdown.
+    """
+    defs = schema.get("$defs", {})
+    if not defs:
+        return
+    for prop in schema.get("properties", {}).values():
+        # Direct $ref: {"$ref": "#/$defs/GenderEnum"}
+        if "$ref" in prop:
+            ref_name = prop["$ref"].rsplit("/", 1)[-1]
+            definition = defs.get(ref_name, {})
+            if "enum" in definition:
+                del prop["$ref"]
+                prop.update(definition)
+            continue
+        # anyOf: [{"$ref": "#/$defs/GenderEnum"}, {"type": "null"}]
+        if "anyOf" in prop:
+            for i, entry in enumerate(prop["anyOf"]):
+                if "$ref" in entry:
+                    ref_name = entry["$ref"].rsplit("/", 1)[-1]
+                    definition = defs.get(ref_name, {})
+                    if "enum" in definition:
+                        prop["anyOf"][i] = definition
 
 
 def _build_fk_table_map() -> dict[str, str]:

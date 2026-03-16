@@ -7,7 +7,7 @@ router = APIRouter(prefix="/api", tags=["blog"])
 
 @router.get("/posts/")
 async def list_posts():
-    posts = await Post.objects.filter(is_published=True).all()
+    posts = await Post.objects.filter(status="published").all()
     return [
         {"id": p.id, "title": p.title, "slug": p.slug, "views": p.views} for p in posts
     ]

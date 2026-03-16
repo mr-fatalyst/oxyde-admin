@@ -6,7 +6,7 @@ from models import Post, Comment
 
 @get("/api/posts/")
 async def list_posts_handler() -> list[dict]:
-    posts = await Post.objects.filter(is_published=True).all()
+    posts = await Post.objects.filter(status="published").all()
     return [
         {"id": p.id, "title": p.title, "slug": p.slug, "views": p.views} for p in posts
     ]

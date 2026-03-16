@@ -50,6 +50,15 @@ export function resolveFormat(prop) {
     return null;
 }
 
+export function resolveEnum(prop) {
+    if (prop.enum) return prop.enum;
+    if (prop.anyOf) {
+        const withEnum = prop.anyOf.find((t) => t.enum);
+        if (withEnum) return withEnum.enum;
+    }
+    return null;
+}
+
 export function extractFkMap(schemaData) {
     const map = {};
     const props = schemaData.properties || {};
@@ -67,6 +76,7 @@ export function extractFkMap(schemaData) {
 export function componentType(field) {
     if (field.m2m) return 'multiselect';
     if (field.fk) return 'select';
+    if (field.enum) return 'enum';
     if (field.type === 'boolean') return 'boolean';
     if (field.type === 'integer' || field.type === 'number') return 'number';
     if (field.format === 'date-time') return 'datetime';
