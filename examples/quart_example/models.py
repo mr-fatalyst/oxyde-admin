@@ -57,6 +57,7 @@ class Post(Model):
     status: PostStatus = PostStatus.PUBLISHED
     created_at: datetime | None = Field(default=None, db_default="CURRENT_TIMESTAMP")
     updated_at: datetime | None = Field(default=None, db_default="CURRENT_TIMESTAMP")
+    keywords: list[str] | None = Field(default=None, db_nullable=True)
     tags: list[Tag] = Field(default=[], db_m2m=True, db_through="PostTag")
 
     class Meta:

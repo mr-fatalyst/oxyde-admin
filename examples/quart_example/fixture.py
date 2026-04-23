@@ -53,6 +53,24 @@ TAGS = [
     "tutorial",
 ]
 
+KEYWORDS = [
+    "getting-started",
+    "how-to",
+    "best-practices",
+    "deep-dive",
+    "step-by-step",
+    "quick-tip",
+    "reference",
+    "comparison",
+    "migration",
+    "optimization",
+    "troubleshooting",
+    "architecture",
+    "patterns",
+    "scalability",
+    "monitoring",
+]
+
 TITLES = [
     "Getting Started with Oxyde",
     "Advanced Query Patterns",
@@ -189,7 +207,8 @@ async def main():
             category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
             status TEXT NOT NULL DEFAULT 'published',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            keywords TEXT
         )
     """)
     await execute_raw("""
@@ -257,6 +276,7 @@ async def main():
             author_id=author.id,
             category_id=category.id,
             status="published",
+            keywords=random.sample(KEYWORDS, k=random.randint(1, 4)),
         )
         posts.append(post)
 
@@ -273,6 +293,7 @@ async def main():
             author_id=author.id,
             category_id=category.id,
             status=status,
+            keywords=random.sample(KEYWORDS, k=random.randint(1, 4)),
         )
         posts.append(post)
 

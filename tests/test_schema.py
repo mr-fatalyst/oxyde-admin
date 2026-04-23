@@ -74,3 +74,16 @@ class TestBuildSchema:
         prop = schema["properties"]["status"]
 
         assert prop["x-db-comment"] == "Current status of the record"
+
+    def test_build_schema_array(self, _mock_rt, MockArrayModel):
+        schema = build_schema(MockArrayModel)
+        prop = schema["properties"]["keywords"]
+
+        assert prop["x-db-array"] is True
+        assert prop["x-db-array-item-type"] == "string"
+
+    def test_build_schema_array_not_on_regular_fields(self, _mock_rt, MockUser):
+        schema = build_schema(MockUser)
+
+        for prop in schema["properties"].values():
+            assert "x-db-array" not in prop

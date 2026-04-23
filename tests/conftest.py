@@ -234,6 +234,40 @@ def site():
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
+_ARRAY_FIELDS = {
+    "id": _ColumnMeta("id", primary_key=True, python_type=int, db_type="INTEGER"),
+    "title": _ColumnMeta("title", python_type=str, max_length=200),
+    "keywords": _ColumnMeta("keywords", python_type=list[str], nullable=True),
+}
+
+_ARRAY_SCHEMA = {
+    "title": "MockArrayModel",
+    "type": "object",
+    "properties": {
+        "id": {"title": "Id", "type": "integer"},
+        "title": {"title": "Title", "type": "string"},
+        "keywords": {
+            "title": "Keywords",
+            "anyOf": [
+                {"type": "array", "items": {"type": "string"}},
+                {"type": "null"},
+            ],
+        },
+    },
+    "required": ["title"],
+}
+
+
+@pytest.fixture()
+def MockArrayModel():
+    return _make_mock_model(
+        "MockArrayModel",
+        "array_models",
+        dict(_ARRAY_FIELDS),
+        _deep_copy_schema(_ARRAY_SCHEMA),
+    )
+
+
 def _deep_copy_schema(schema: dict) -> dict:
     """Deep-copy a schema dict so tests don't mutate shared state."""
     import copy

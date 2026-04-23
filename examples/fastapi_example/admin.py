@@ -39,6 +39,7 @@ admin.register(
         "author_id",
         "category_id",
         "tags",
+        "keywords",
         "status",
         "views",
         "created_at",

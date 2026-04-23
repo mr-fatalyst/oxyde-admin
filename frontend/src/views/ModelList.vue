@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import { api } from '@/api.js';
-import { serializeDate, resolveType, hasRef, resolveFormat, resolveEnum, extractFkMap, componentType } from '@/utils.js';
+import { serializeDate, resolveType, hasRef, resolveFormat, resolveEnum, extractFkMap, componentType, coerceArrayValues } from '@/utils.js';
 
 const appConfig = inject('appConfig', {});
 
@@ -83,6 +83,7 @@ function colType(col) {
     if (prop['x-db-m2m']) return 'm2m';
     if (prop['x-db-primary-key']) return 'pk';
     if (fkModels.value[col]) return 'fk';
+    if (prop['x-db-array']) return 'array';
     if (resolveEnum(prop)) return 'enum';
     if (prop.type === 'boolean') return 'boolean';
     if (prop.anyOf && prop.anyOf.some((t) => t.type === 'boolean')) return 'boolean';
@@ -136,6 +137,7 @@ function buildBulkFields(schema, labels, roFields) {
             isReadonly: !!prop['x-db-readonly'] || roSet.has(name),
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
             enum: resolveEnum(prop),
+            arrayItemType: prop['x-db-array-item-type'] || null,
             fk,
             m2m: null,
         });
@@ -463,6 +465,9 @@ async function doBulkUpdate() {
     for (const f of bulkFields.value) {
         if (bulkEnabled.value[f.name]) {
             let val = bulkFormData.value[f.name];
+            if (f.type === 'array' && Array.isArray(val)) {
+                val = coerceArrayValues(val, f.arrayItemType);
+            }
             if (val instanceof Date) {
                 val = serializeDate(val, f.format);
             }
@@ -599,6 +604,17 @@ onMounted(async () => {
                             :key="idx"
                             :value="typeof item === 'object' ? (item.name || item.title || item.label || Object.values(item)[1] || Object.values(item)[0]) : item"
                             severity="info"
+                            class="text-xs"
+                        />
+                    </div>
+
+                    <!-- Array -->
+                    <div v-else-if="colType(col) === 'array'" class="flex flex-wrap gap-1">
+                        <Tag
+                            v-for="(item, idx) in (Array.isArray(data[col]) ? data[col] : [])"
+                            :key="idx"
+                            :value="String(item)"
+                            severity="secondary"
                             class="text-xs"
                         />
                     </div>
@@ -748,6 +764,16 @@ onMounted(async () => {
                         :disabled="field.isReadonly || !bulkEnabled[field.name]"
                         rows="3"
                         autoResize
+                        fluid
+                    />
+
+                    <!-- Array (chips) -->
+                    <InputChips
+                        v-else-if="componentType(field) === 'chips'"
+                        v-model="bulkFormData[field.name]"
+                        :disabled="field.isReadonly || !bulkEnabled[field.name]"
+                        separator=","
+                        addOnBlur
                         fluid
                     />
 

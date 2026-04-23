@@ -4,7 +4,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import { useConfirm } from 'primevue/useconfirm';
 import { api } from '@/api.js';
-import { findPk, serializeDate, resolveType, hasRef, resolveFormat, resolveEnum, extractFkMap, componentType } from '@/utils.js';
+import { findPk, serializeDate, resolveType, hasRef, resolveFormat, resolveEnum, extractFkMap, componentType, coerceArrayValues } from '@/utils.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -83,6 +83,7 @@ function buildFields(schemaData, labels, roFields) {
             default: prop.default ?? null,
             maxLength: prop.maxLength || prop['x-db-max-length'] || null,
             enum: resolveEnum(prop),
+            arrayItemType: prop['x-db-array-item-type'] || null,
             fk,
             m2m: null,
         });
@@ -147,6 +148,9 @@ function buildPayload() {
         if (f.m2m) {
             payload[f.name] = Array.isArray(val) ? val : [];
             continue;
+        }
+        if (f.type === 'array' && Array.isArray(val)) {
+            val = coerceArrayValues(val, f.arrayItemType);
         }
         if (val instanceof Date) {
             val = serializeDate(val, f.format);
@@ -384,7 +388,11 @@ async function dlgSave() {
         const payload = {};
         for (const f of dlgFields.value) {
             if (f.isReadonly || f.isPk) continue;
-            payload[f.name] = dlgFormData.value[f.name];
+            let val = dlgFormData.value[f.name];
+            if (f.type === 'array' && Array.isArray(val)) {
+                val = coerceArrayValues(val, f.arrayItemType);
+            }
+            payload[f.name] = val;
         }
 
         const res = await api(`/api/${fkModel}`, {
@@ -582,6 +590,18 @@ onMounted(async () => {
                         fluid
                     />
 
+                    <!-- Array (chips) -->
+                    <InputChips
+                        v-else-if="componentType(field) === 'chips'"
+                        :id="field.name"
+                        v-model="formData[field.name]"
+                        :disabled="field.isReadonly"
+                        :invalid="!!errors[field.name]"
+                        separator=","
+                        addOnBlur
+                        fluid
+                    />
+
                     <!-- Text -->
                     <InputText
                         v-else
@@ -712,6 +732,16 @@ onMounted(async () => {
                         :invalid="!!dlgErrors[field.name]"
                         rows="5"
                         autoResize
+                        fluid
+                    />
+
+                    <InputChips
+                        v-else-if="componentType(field) === 'chips'"
+                        :id="'dlg-' + field.name"
+                        v-model="dlgFormData[field.name]"
+                        :invalid="!!dlgErrors[field.name]"
+                        separator=","
+                        addOnBlur
                         fluid
                     />
 

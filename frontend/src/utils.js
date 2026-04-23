@@ -77,10 +77,37 @@ export function componentType(field) {
     if (field.m2m) return 'multiselect';
     if (field.fk) return 'select';
     if (field.enum) return 'enum';
+    if (field.type === 'array') return 'chips';
     if (field.type === 'boolean') return 'boolean';
     if (field.type === 'integer' || field.type === 'number') return 'number';
     if (field.format === 'date-time') return 'datetime';
     if (field.format === 'date') return 'date';
     if (field.type === 'string' && !field.maxLength && (!field.dbType || field.dbType.toUpperCase() === 'TEXT')) return 'textarea';
     return 'text';
+}
+
+export function coerceArrayValues(val, itemType) {
+    if (!Array.isArray(val)) return val;
+    if (!itemType) return val;
+    const out = [];
+    for (const raw of val) {
+        if (raw == null) continue;
+        if (itemType === 'integer') {
+            const n = typeof raw === 'number' ? Math.trunc(raw) : Number.parseInt(String(raw).trim(), 10);
+            if (Number.isFinite(n)) out.push(n);
+        } else if (itemType === 'number') {
+            const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw).trim());
+            if (Number.isFinite(n)) out.push(n);
+        } else if (itemType === 'boolean') {
+            if (typeof raw === 'boolean') out.push(raw);
+            else {
+                const s = String(raw).trim().toLowerCase();
+                if (s === 'true' || s === '1') out.push(true);
+                else if (s === 'false' || s === '0') out.push(false);
+            }
+        } else {
+            out.push(typeof raw === 'string' ? raw : String(raw));
+        }
+    }
+    return out;
 }

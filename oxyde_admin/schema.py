@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, get_args, get_origin, TYPE_CHECKING
 
 from oxyde.models import registered_tables
 
@@ -55,6 +55,14 @@ def build_schema(model: type[Model]) -> dict[str, Any]:
         if col.comment is not None:
             prop["x-db-comment"] = col.comment
 
+        if get_origin(col.python_type) is list:
+            prop["x-db-array"] = True
+            args = get_args(col.python_type)
+            if args:
+                item_type = _PYTHON_TO_JSON_TYPE.get(args[0])
+                if item_type:
+                    prop["x-db-array-item-type"] = item_type
+
     # M2M relations
     fk_table_map_rev = {
         model.__name__: model._db_meta.table_name
@@ -102,6 +110,14 @@ def _resolve_enum_refs(schema: dict[str, Any]) -> None:
                     definition = defs.get(ref_name, {})
                     if "enum" in definition:
                         prop["anyOf"][i] = definition
+
+
+_PYTHON_TO_JSON_TYPE: dict[type, str] = {
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+}
 
 
 def _build_fk_table_map() -> dict[str, str]:
