@@ -318,9 +318,14 @@ async def _sync_m2m_bulk(
 
         await through_model.objects.filter(**{f"{source_fk}__in": record_pks}).delete()
 
-        for rpk in record_pks:
-            for tid in target_ids:
-                await through_model.objects.create(**{source_fk: rpk, target_fk: tid})
+        if record_pks and target_ids:
+            await through_model.objects.bulk_create(
+                [
+                    {source_fk: rpk, target_fk: tid}
+                    for rpk in record_pks
+                    for tid in target_ids
+                ]
+            )
 
 
 async def _sync_m2m(
@@ -358,6 +363,7 @@ async def _sync_m2m(
         # Delete existing junction rows for this record
         await through_model.objects.filter(**{source_fk: record_pk}).delete()
 
-        # Re-create junction rows
-        for tid in target_ids:
-            await through_model.objects.create(**{source_fk: record_pk, target_fk: tid})
+        if target_ids:
+            await through_model.objects.bulk_create(
+                [{source_fk: record_pk, target_fk: tid} for tid in target_ids]
+            )
