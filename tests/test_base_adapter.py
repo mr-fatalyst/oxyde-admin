@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+import datetime
+import decimal
+import enum
+import json
+import uuid
+
+import pytest
+
+from oxyde_admin.adapters.base import json_default
 from oxyde_admin.site import AdminSite
 from oxyde_admin.config import Preset, PrimaryColor, Surface
 
@@ -80,6 +89,54 @@ class TestBuildModelsList:
         assert entry["exportable"] is False
         assert entry["group"] == "Auth"
         assert entry["icon"] == "pi pi-users"
+
+
+class TestJsonDefault:
+    def test_datetime_date_time(self):
+        payload = {
+            "dt": datetime.datetime(2026, 7, 6, 12, 30, 15),
+            "d": datetime.date(2026, 7, 6),
+            "t": datetime.time(12, 30, 15),
+        }
+        result = json.loads(json.dumps(payload, default=json_default))
+
+        assert result == {
+            "dt": "2026-07-06T12:30:15",
+            "d": "2026-07-06",
+            "t": "12:30:15",
+        }
+
+    def test_uuid(self):
+        value = uuid.uuid4()
+        result = json.loads(json.dumps({"id": value}, default=json_default))
+
+        assert result == {"id": str(value)}
+
+    def test_plain_enum(self):
+        class Status(enum.Enum):
+            ACTIVE = 1
+
+        result = json.loads(json.dumps({"s": Status.ACTIVE}, default=json_default))
+
+        assert result == {"s": 1}
+
+    def test_str_enum_value(self):
+        class Color(enum.Enum):
+            RED = "red"
+
+        result = json.loads(json.dumps({"c": Color.RED}, default=json_default))
+
+        assert result == {"c": "red"}
+
+    def test_decimal_preserves_precision(self):
+        value = decimal.Decimal("10.010")
+        result = json.loads(json.dumps({"price": value}, default=json_default))
+
+        assert result == {"price": "10.010"}
+
+    def test_unsupported_type_raises(self):
+        with pytest.raises(TypeError, match="not JSON serializable"):
+            json.dumps({"x": object()}, default=json_default)
 
 
 class TestResolveModel:

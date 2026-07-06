@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oxyde-admin"
-version = "0.4.0"
+dynamic = ["version"]
 description = "Admin interface for Oxyde ORM"
 readme = "README.md"
 license = {text = "MIT"}
@@ -38,6 +38,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-asyncio",
+    "ruff",
     "fastapi",
     "litestar",
     "sanic",
@@ -52,11 +53,14 @@ Homepage = "https://github.com/mr-fatalyst/oxyde-admin"
 Repository = "https://github.com/mr-fatalyst/oxyde-admin"
 Issues = "https://github.com/mr-fatalyst/oxyde-admin/issues"
 
+[tool.setuptools.dynamic]
+version = {attr = "oxyde_admin._version.__version__"}
+
 [tool.setuptools.packages.find]
 include = ["oxyde_admin*"]
 
 [tool.setuptools.package-data]
-oxyde_admin = ["static/**/*"]
+oxyde_admin = ["static/**/*", "py.typed"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

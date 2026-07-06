@@ -1,4 +1,4 @@
-.PHONY: install install-front dev-front build run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic run-quart fixture-quart run-falcon fixture-falcon
+.PHONY: install install-front dev-front build lint test run-fastapi fixture-fastapi run-litestar fixture-litestar run-sanic fixture-sanic run-quart fixture-quart run-falcon fixture-falcon
 
 VENV = .venv/bin
 
@@ -13,6 +13,13 @@ dev-front:
 
 build:
 	cd frontend && npm run build
+
+lint:
+	$(VENV)/ruff check oxyde_admin tests
+	$(VENV)/ruff format --check oxyde_admin tests
+
+test:
+	$(VENV)/pytest -v
 
 run-fastapi:
 	cd examples/fastapi_example && ../../$(VENV)/uvicorn app:app --reload --port 8000

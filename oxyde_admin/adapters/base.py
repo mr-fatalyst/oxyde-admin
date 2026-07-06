@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import datetime as _dt
+import decimal
+import enum
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -19,9 +22,16 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 def json_default(obj):
-    """JSON serializer for datetime objects. Shared across adapters."""
-    if isinstance(obj, (_dt.datetime, _dt.date)):
+    """JSON serializer for types the stdlib encoder rejects. Shared across adapters."""
+    if isinstance(obj, (_dt.datetime, _dt.date, _dt.time)):
         return obj.isoformat()
+    if isinstance(obj, uuid.UUID):
+        return str(obj)
+    if isinstance(obj, enum.Enum):
+        return obj.value
+    if isinstance(obj, decimal.Decimal):
+        # str, not float: Decimal exists to preserve exact precision
+        return str(obj)
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 

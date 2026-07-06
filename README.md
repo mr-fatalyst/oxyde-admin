@@ -32,7 +32,7 @@
 ## Requirements
 
 - Python ≥ 3.10
-- [`oxyde`](https://github.com/mr-fatalyst/oxyde) ≥ 0.5.0
+- [`oxyde`](https://github.com/mr-fatalyst/oxyde) ≥ 0.7.0
 - One of the supported frameworks (`fastapi` / `litestar` / `sanic` / `quart` / `falcon`)
 - An ASGI server (e.g. `uvicorn`, `hypercorn`)
 
