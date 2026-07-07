@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -82,6 +82,28 @@ class TestExclude:
     def test_exclude_missing_noop(self, MockUser):
         site = AdminSite()
         site.exclude(MockUser)  # should not raise
+
+
+@pytest.mark.asyncio
+class TestLimits:
+    async def test_options_limit_capped_at_per_page(self, site, MockUser):
+        site.register(MockUser)
+        MockUser.objects.all = AsyncMock(return_value=[])
+
+        await site._handle_options("users", limit=999)
+
+        MockUser.objects.limit.assert_called_with(site.per_page)
+
+    async def test_export_defaults_ordering_to_pk(self, site, MockUser):
+        site.register(MockUser)
+        MockUser.objects.count = AsyncMock(return_value=1)
+        MockUser.objects.all = AsyncMock(return_value=[])
+
+        stream, _, _ = await site._handle_export("users", {})
+        async for _ in stream:
+            pass
+
+        MockUser.objects.order_by.assert_called_with("id")
 
 
 class TestModelsProperty:

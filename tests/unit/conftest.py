@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -47,13 +47,17 @@ def _make_fk(target: str, target_field: str = "id"):
 
 
 def _make_objects_mock():
-    """Create an AsyncMock QueryManager that supports chaining."""
-    qm = AsyncMock()
-    qm.filter.return_value = qm
-    qm.order_by.return_value = qm
-    qm.limit.return_value = qm
-    qm.offset.return_value = qm
-    qm.prefetch.return_value = qm
+    """Create a mock QueryManager: sync chain methods, async terminal ones."""
+    qm = MagicMock()
+    for chain in ("filter", "order_by", "limit", "offset", "prefetch"):
+        getattr(qm, chain).return_value = qm
+    qm.all = AsyncMock(return_value=[])
+    qm.get = AsyncMock()
+    qm.count = AsyncMock(return_value=0)
+    qm.create = AsyncMock()
+    qm.delete = AsyncMock(return_value=0)
+    qm.update = AsyncMock(return_value=0)
+    qm.bulk_create = AsyncMock()
     return qm
 
 

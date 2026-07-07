@@ -169,6 +169,7 @@ class AdminSite:
         model = self._require_model(model_name)
         config = self._registry.get(model)
         display = config.display_field if config else None
+        limit = max(1, min(limit, self.per_page))
         return await get_options(
             model, display, search=search, limit=limit, include=include
         )
@@ -192,6 +193,9 @@ class AdminSite:
         order_list = (
             ordering.split(",") if ordering else (config.ordering if config else None)
         )
+        if not order_list:
+            # LIMIT/OFFSET chunking is only deterministic with a total order
+            order_list = [_get_pk_field(model)[0]]
         filters = self._extract_filters(
             model, query_params, config.list_filter if config else None
         )
