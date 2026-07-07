@@ -115,7 +115,9 @@ class LitestarAdmin(AbstractAdapter):
         for exc_cls, (status_code, detail_fn) in self.EXCEPTION_MAP.items():
 
             def _make_handler(_status=status_code, _fn=detail_fn):
-                async def handler(request: Request, exc) -> Response:
+                # Litestar exception handlers must be sync callables returning
+                # a Response; an async handler yields a coroutine and a 500.
+                def handler(request: Request, exc) -> Response:
                     detail = _fn(exc)
                     return Response(content={"detail": detail}, status_code=_status)
 

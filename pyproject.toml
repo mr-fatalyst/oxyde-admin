@@ -39,6 +39,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "ruff",
+    "httpx",
     "fastapi",
     "litestar",
     "sanic",
