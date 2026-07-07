@@ -4,6 +4,8 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
+from pydantic import TypeAdapter
+
 from oxyde import atomic
 from oxyde.models import registered_tables
 
@@ -155,6 +157,7 @@ async def bulk_update(
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
+    clean = _validate_field_values(model, clean)
     count = 0
     tx = atomic() if m2m_data else nullcontext()
     async with tx:
@@ -264,6 +267,24 @@ async def resolve_fk_labels(
         *(_resolve(col_name, col_meta) for col_name, col_meta in fk_fields.items())
     )
     return result
+
+
+def _validate_field_values(
+    model: type[Model], values: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate values against their field annotations.
+
+    Bulk updates have no record instance to run a full ``model_validate``
+    against, so each value is checked in isolation.
+    """
+    validated = {}
+    for key, value in values.items():
+        field = model.model_fields.get(key)
+        if field is None:
+            validated[key] = value
+            continue
+        validated[key] = TypeAdapter(field.annotation).validate_python(value)
+    return validated
 
 
 def _get_pk_field(model: type[Model]) -> tuple[str, type]:
