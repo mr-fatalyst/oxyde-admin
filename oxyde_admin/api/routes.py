@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
+from oxyde import atomic
 from oxyde.models import registered_tables
 
 if TYPE_CHECKING:
@@ -77,16 +79,19 @@ async def create_record(
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
-    record = await model.objects.create(**clean)
-    if m2m_data:
-        await _sync_m2m(model, record, m2m_data)
-        m2m_fields = list(m2m_data.keys())
-        pk_name = _get_pk_field(model)[0]
-        record = (
-            await model.objects.prefetch(*m2m_fields)
-            .filter(**{pk_name: getattr(record, pk_name)})
-            .get()
-        )
+    # A single-statement write is already atomic; a transaction is only needed
+    # when the M2M sync adds more statements around it.
+    tx = atomic() if m2m_data else nullcontext()
+    async with tx:
+        record = await model.objects.create(**clean)
+        if m2m_data:
+            await _sync_m2m(model, record, m2m_data)
+            m2m_fields = list(m2m_data.keys())
+            record = (
+                await model.objects.prefetch(*m2m_fields)
+                .filter(**{name: getattr(record, name)})
+                .get()
+            )
     return record
 
 
@@ -102,13 +107,15 @@ async def update_record(
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
-    if clean:
-        validated = model.model_validate({**record.model_dump(), **clean})
-        for key in clean:
-            setattr(record, key, getattr(validated, key))
-        await record.save(update_fields=set(clean.keys()))
-    if m2m_data:
-        await _sync_m2m(model, record, m2m_data)
+    tx = atomic() if m2m_data else nullcontext()
+    async with tx:
+        if clean:
+            validated = model.model_validate({**record.model_dump(), **clean})
+            for key in clean:
+                setattr(record, key, getattr(validated, key))
+            await record.save(update_fields=set(clean.keys()))
+        if m2m_data:
+            await _sync_m2m(model, record, m2m_data)
     m2m_fields = _get_m2m_fields(model)
     if m2m_fields:
         record = (
@@ -149,12 +156,16 @@ async def bulk_update(
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
     count = 0
-    if clean:
-        count = await model.objects.filter(**{f"{name}__in": typed_ids}).update(**clean)
-    if m2m_data:
-        await _sync_m2m_bulk(model, typed_ids, m2m_data)
-        if not count:
-            count = len(typed_ids)
+    tx = atomic() if m2m_data else nullcontext()
+    async with tx:
+        if clean:
+            count = await model.objects.filter(**{f"{name}__in": typed_ids}).update(
+                **clean
+            )
+        if m2m_data:
+            await _sync_m2m_bulk(model, typed_ids, m2m_data)
+            if not count:
+                count = len(typed_ids)
     return count
 
 

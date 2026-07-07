@@ -98,3 +98,36 @@ async def test_m2m_sync_on_update(client):
     r = await client.patch(f"/admin/api/books/{book['id']}", json={"tags": [scifi]})
     assert r.status_code == 200
     assert {t["name"] for t in r.json()["tags"]} == {"scifi"}
+
+
+async def test_m2m_sync_rolls_back_on_failure(client):
+    r = await client.get("/admin/api/books", params={"search": "dune"})
+    dune = r.json()["items"][0]
+    assert {t["name"] for t in dune["tags"]} == {"scifi", "classic"}
+
+    r = await client.get("/admin/api/tags/options")
+    scifi = next(o["value"] for o in r.json() if o["label"] == "scifi")
+
+    # duplicate target ids violate UNIQUE(book_id, tag_id) inside the sync;
+    # the failed sync must not lose the previously existing links
+    r = await client.patch(
+        f"/admin/api/books/{dune['id']}", json={"tags": [scifi, scifi]}
+    )
+    assert r.status_code == 409
+
+    r = await client.get(f"/admin/api/books/{dune['id']}")
+    assert {t["name"] for t in r.json()["tags"]} == {"scifi", "classic"}
+
+
+async def test_create_rolls_back_on_m2m_failure(client):
+    r = await client.get("/admin/api/tags/options")
+    scifi = next(o["value"] for o in r.json() if o["label"] == "scifi")
+
+    r = await client.post(
+        "/admin/api/books", json={"title": "Ghost Book", "tags": [scifi, scifi]}
+    )
+    assert r.status_code == 409
+
+    # the record created before the failed sync must not survive
+    r = await client.get("/admin/api/books", params={"search": "ghost"})
+    assert r.json()["total"] == 0
