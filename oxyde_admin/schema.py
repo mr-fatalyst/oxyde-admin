@@ -8,11 +8,22 @@ if TYPE_CHECKING:
     from oxyde.models import Model
 
 
-def build_schema(model: type[Model]) -> dict[str, Any]:
-    """Build JSON Schema enriched with ``x-db-*`` extensions from ``_db_meta``."""
+def build_schema(
+    model: type[Model], exclude: list[str] | None = None
+) -> dict[str, Any]:
+    """Build JSON Schema enriched with ``x-db-*`` extensions from ``_db_meta``.
+
+    Fields listed in ``exclude`` are removed from the schema entirely, so the
+    frontend never renders them.
+    """
     schema = model.model_json_schema()
     _resolve_enum_refs(schema)
     properties = schema.get("properties", {})
+    if exclude:
+        for field_name in exclude:
+            properties.pop(field_name, None)
+        if "required" in schema:
+            schema["required"] = [f for f in schema["required"] if f not in exclude]
     fk_table_map = _build_fk_table_map()
 
     for field_name, col in model._db_meta.field_metadata.items():

@@ -87,3 +87,18 @@ class TestBuildSchema:
 
         for prop in schema["properties"].values():
             assert "x-db-array" not in prop
+
+
+@patch("oxyde_admin.schema.registered_tables", return_value={})
+class TestExcludeFields:
+    def test_exclude_removes_property_and_required(self, _mock_rt, MockUser):
+        schema = build_schema(MockUser, exclude=["email"])
+
+        assert "email" not in schema["properties"]
+        assert "email" not in schema.get("required", [])
+        assert "name" in schema["properties"]
+
+    def test_exclude_unknown_field_is_noop(self, _mock_rt, MockUser):
+        schema = build_schema(MockUser, exclude=["nonexistent"])
+
+        assert set(schema["properties"]) == {"id", "name", "email", "is_active"}

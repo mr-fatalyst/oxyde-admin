@@ -175,6 +175,7 @@ admin.register(
 | `search_fields` | Fields included in text search |
 | `list_filter` | Columns available as filters |
 | `readonly_fields` | Fields disabled in the edit form |
+| `exclude_fields` | Fields stripped from API responses, schema and export, and blocked on write (e.g. `password_hash`) |
 | `ordering` | Default sort order (prefix `-` for descending) |
 | `display_field` | Field used as label in FK dropdowns |
 | `column_labels` | Custom column headers |

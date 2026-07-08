@@ -101,9 +101,39 @@ class AdminSite:
     # Handlers — framework-agnostic business logic
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _exclude_set(config: ModelAdmin | None) -> set[str] | None:
+        """Fields stripped from every serialized record and from the schema."""
+        if config and config.exclude_fields:
+            return set(config.exclude_fields)
+        return None
+
+    @staticmethod
+    def _blocked_fields(config: ModelAdmin | None) -> list[str] | None:
+        """Fields that must not be written: readonly + excluded."""
+        if config is None:
+            return None
+        blocked = (config.readonly_fields or []) + (config.exclude_fields or [])
+        return blocked or None
+
+    @classmethod
+    def _strip_excluded(
+        cls, data: dict[str, Any], config: ModelAdmin | None
+    ) -> dict[str, Any]:
+        """Drop excluded fields from an incoming payload.
+
+        Runs before M2M extraction so excluded relation fields never reach
+        the sync either.
+        """
+        exclude = cls._exclude_set(config)
+        if not exclude:
+            return data
+        return {k: v for k, v in data.items() if k not in exclude}
+
     async def _handle_schema(self, model_name: str) -> dict[str, Any]:
         model = self._require_model(model_name)
-        return build_schema(model)
+        config = self._registry.get(model)
+        return build_schema(model, exclude=config.exclude_fields if config else None)
 
     async def _handle_list(
         self,
@@ -136,8 +166,9 @@ class AdminSite:
             search_fields=config.search_fields if config else None,
         )
         fk_labels = await resolve_fk_labels(model, result.items, self._registry)
+        exclude = self._exclude_set(config)
         return {
-            "items": [item.model_dump() for item in result.items],
+            "items": [item.model_dump(exclude=exclude) for item in result.items],
             "total": result.total,
             "page": result.page,
             "per_page": result.per_page,
@@ -204,6 +235,7 @@ class AdminSite:
         if total > self.max_export_rows:
             raise ExportTooLargeError(total, self.max_export_rows)
 
+        exclude = self._exclude_set(config)
         chunk = self.export_chunk_size
         common = dict(
             ordering=order_list,
@@ -226,7 +258,9 @@ class AdminSite:
                     )
                     for item in result.items:
                         row = json_mod.dumps(
-                            item.model_dump(), default=str, ensure_ascii=False
+                            item.model_dump(exclude=exclude),
+                            default=str,
+                            ensure_ascii=False,
                         )
                         if not first:
                             yield ","
@@ -248,7 +282,7 @@ class AdminSite:
             page = 1
             while True:
                 result = await list_records(model, page=page, per_page=chunk, **common)
-                rows = [item.model_dump() for item in result.items]
+                rows = [item.model_dump(exclude=exclude) for item in result.items]
                 if rows:
                     buf = io.StringIO()
                     writer = csv.DictWriter(buf, fieldnames=rows[0].keys())
@@ -267,8 +301,9 @@ class AdminSite:
         from oxyde_admin.api.routes import get_record
 
         model = self._require_model(model_name)
+        config = self._registry.get(model)
         record = await get_record(model, pk)
-        return record.model_dump()
+        return record.model_dump(exclude=self._exclude_set(config))
 
     async def _handle_create(
         self, model_name: str, data: dict[str, Any]
@@ -276,15 +311,16 @@ class AdminSite:
         from oxyde_admin.api.routes import create_record
 
         model = self._require_model(model_name)
-        clean, m2m_data = self._extract_m2m(model, data)
         config = self._registry.get(model)
+        data = self._strip_excluded(data, config)
+        clean, m2m_data = self._extract_m2m(model, data)
         record = await create_record(
             model,
             clean,
-            readonly_fields=config.readonly_fields if config else None,
+            readonly_fields=self._blocked_fields(config),
             m2m_data=m2m_data,
         )
-        return record.model_dump()
+        return record.model_dump(exclude=self._exclude_set(config))
 
     async def _handle_update(
         self, model_name: str, pk: str, data: dict[str, Any]
@@ -293,15 +329,16 @@ class AdminSite:
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
+        data = self._strip_excluded(data, config)
         clean, m2m_data = self._extract_m2m(model, data)
         record = await update_record(
             model,
             pk,
             clean,
-            readonly_fields=config.readonly_fields if config else None,
+            readonly_fields=self._blocked_fields(config),
             m2m_data=m2m_data,
         )
-        return record.model_dump()
+        return record.model_dump(exclude=self._exclude_set(config))
 
     async def _handle_delete(self, model_name: str, pk: str) -> dict[str, Any]:
         from oxyde_admin.api.routes import delete_record
@@ -324,12 +361,13 @@ class AdminSite:
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
+        data = self._strip_excluded(data, config)
         clean, m2m_data = self._extract_m2m(model, data)
         count = await bulk_update(
             model,
             ids,
             clean,
-            readonly_fields=config.readonly_fields if config else None,
+            readonly_fields=self._blocked_fields(config),
             m2m_data=m2m_data,
         )
         return {"updated": count}
@@ -371,6 +409,7 @@ class AdminSite:
                     "exportable": config.exportable,
                     "search_fields": config.search_fields,
                     "readonly_fields": config.readonly_fields,
+                    "exclude_fields": config.exclude_fields,
                     "group": config.group,
                     "icon": config.icon,
                 }
