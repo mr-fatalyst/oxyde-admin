@@ -1,18 +1,11 @@
 import asyncio
-import hashlib
 import random
 import re
-import secrets
 
 from oxyde import db, execute_raw
 
 from models import DB_URL, User, Category, Post, Comment, Tag, PostTag
-
-
-def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    digest = hashlib.sha256((salt + password).encode()).hexdigest()
-    return f"{salt}${digest}"
+from auth import hash_password
 
 
 def slugify(text: str) -> str:

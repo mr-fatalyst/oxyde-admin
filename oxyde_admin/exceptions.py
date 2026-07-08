@@ -25,6 +25,14 @@ class InvalidParameterError(AdminError):
     """Raised when a query parameter or request body has an invalid shape."""
 
 
+class LoginNotAvailableError(AdminError):
+    """Raised when the built-in login endpoint is not enabled."""
+
+
+class LoginFailedError(AdminError):
+    """Raised when login credentials are rejected."""
+
+
 class ExportNotAllowedError(AdminError):
     """Raised when export is disabled for a model."""
 

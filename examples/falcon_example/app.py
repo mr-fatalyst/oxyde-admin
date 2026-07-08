@@ -3,7 +3,6 @@ import falcon.asgi
 from oxyde import db
 
 from models import DB_URL
-from auth import LoginResource, MeResource
 from routes import PostsResource, PostResource
 from admin import admin
 
@@ -18,8 +17,6 @@ class LifespanMiddleware:
 
 app = falcon.asgi.App(middleware=[LifespanMiddleware()])
 
-app.add_route("/auth/login", LoginResource())
-app.add_route("/auth/me", MeResource())
 app.add_route("/api/posts", PostsResource())
 app.add_route("/api/posts/{slug}", PostResource())
 

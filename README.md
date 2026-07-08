@@ -80,8 +80,9 @@ All adapters accept the same constructor parameters:
 | `per_page` | `100` | Maximum page size for the list view |
 | `export_chunk_size` | `10_000` | Rows per chunk while streaming an export |
 | `max_export_rows` | `100_000` | Hard cap on total exported rows |
-| `auth_check` | `None` | Callable `(request) -> bool`, sync or async |
-| `login_url` | `None` | Where the UI redirects on `401` |
+| `auth_provider` | `None` | `AuthProvider` instance (see [Authentication](#authentication)) |
+| `auth_check` | `None` | **Deprecated, removed in 0.7.0** — legacy callable `(request) -> bool` |
+| `login_url` | `None` | External login endpoint used when the provider has no `login()` |
 
 ## Frameworks
 
@@ -234,32 +235,65 @@ admin = FastAPIAdmin(
 
 ## Authentication
 
-> **Note:** This section describes the current behavior. The authentication
-> flow will be reworked in the future.
-
-Pass an `auth_check` callback and a `login_url`:
+Implement an `AuthProvider` and pass it to the adapter:
 
 ```python
-async def check_admin(request) -> bool:
-    token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-    return await verify_admin_token(token)
+from oxyde_admin import AdminUser, AuthProvider, FastAPIAdmin
 
-admin = FastAPIAdmin(
-    auth_check=check_admin,
-    login_url="/auth/login",
-)
+class MyAuthProvider(AuthProvider):
+    async def authenticate(self, request) -> AdminUser | None:
+        token = request.headers.get("authorization", "").removeprefix("Bearer ")
+        user = await load_admin_by_token(token)      # your logic
+        return AdminUser(id=str(user.id), name=user.name) if user else None
+
+    async def login(self, credentials) -> str | None:
+        user = await check_password(
+            credentials.email, credentials.password.get_secret_value()
+        )
+        return issue_token(user) if user else None   # your logic
+
+admin = FastAPIAdmin(auth_provider=MyAuthProvider())
 ```
 
-- `auth_check` may be **sync or async** — the adapter detects this at runtime.
-- `GET <prefix>/api/config` is intentionally **not gated** by `auth_check` so the
-  unauthenticated UI can read `login_url` and the theme on the login screen.
-- The frontend stores the token in `localStorage` under the key `admin_token`
-  and sends it as `Authorization: Bearer <token>` on every API request. On a
-  `401` it clears the token and redirects to `login_url`.
+- `authenticate` receives a framework-agnostic `AuthRequest` — `headers`
+  (lowercase keys), `cookies`, `path`, `method`, plus the `native` framework
+  request as an escape hatch. The same provider works on every supported
+  framework. Return `AdminUser` to allow the request, `None` for a 401.
+- Implementing `login` enables the built-in `POST /api/login` endpoint and
+  the admin's own login form. The form is rendered from
+  `AuthProvider.credentials_model`, a Pydantic model (default: `email` +
+  `password`). Declare your own model to change the fields — `SecretStr`
+  fields render as password inputs:
 
-Your `login_url` endpoint must accept `POST {"email": "...", "password": "..."}`
-and return `{"token": "<...>"}` on success, or a non-2xx response with
-`{"detail": "..."}` on failure.
+  ```python
+  class MyCredentials(BaseModel):
+      username: str
+      password: SecretStr
+      otp: str | None = Field(default=None, title="One-time code")
+
+  class MyAuthProvider(AuthProvider):
+      credentials_model = MyCredentials
+  ```
+
+- Without `login()`, set `login_url` instead: the admin's login form posts
+  `POST {"email": ..., "password": ...}` there and expects
+  `{"token": "<...>"}` back.
+- `GET /api/config` and `POST /api/login` are intentionally **not gated** so
+  the login screen can bootstrap itself.
+- The frontend stores the token in `localStorage` under `admin_token` and
+  sends `Authorization: Bearer <token>` on every request; on a `401` it
+  clears the token and shows the login screen. Bearer auth is immune to CSRF;
+  the localStorage-vs-cookie trade-off is deliberate.
+- Rate limiting / brute-force protection of the login endpoint is the host
+  application's responsibility.
+
+### Migrating from `auth_check`
+
+The `auth_check` callable (native request in, `bool` out) is deprecated and
+will be removed in 0.7.0; it keeps working with a `DeprecationWarning` until
+then. To migrate, move its body into `AuthProvider.authenticate`: the native
+request is available as `request.native`, and you return `AdminUser(...)`
+instead of `True`.
 
 ## API
 
@@ -268,6 +302,7 @@ the admin `prefix`):
 
 ```
 GET    /api/config
+POST   /api/login                 { "email": ..., "password": ... } → { "token": ... }
 GET    /api/models
 GET    /api/models/counts
 GET    /api/<model>/schema

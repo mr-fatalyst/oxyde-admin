@@ -10,11 +10,14 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from oxyde_admin.auth import AdminUser, AuthRequest
 from oxyde_admin.exceptions import (
     ConflictError,
     ExportNotAllowedError,
     ExportTooLargeError,
     InvalidParameterError,
+    LoginFailedError,
+    LoginNotAvailableError,
     ModelNotFoundError,
     RecordNotFoundError,
 )
@@ -50,6 +53,8 @@ class AbstractAdapter(AdminSite, ABC):
     EXCEPTION_MAP: dict[type[Exception], tuple[int, Any]] = {
         ModelNotFoundError: (404, str),
         RecordNotFoundError: (404, str),
+        LoginNotAvailableError: (404, str),
+        LoginFailedError: (401, str),
         ExportNotAllowedError: (403, str),
         ExportTooLargeError: (400, str),
         ConflictError: (409, str),
@@ -95,6 +100,27 @@ class AbstractAdapter(AdminSite, ABC):
     def _register_static(self, app) -> None:
         """Register static file serving and SPA catch-all on the application."""
         ...
+
+    # ------------------------------------------------------------------
+    # Auth — the decision logic; adapters only do the plumbing
+    # ------------------------------------------------------------------
+
+    AUTH_EXEMPT_PATHS = ("/api/config", "/api/login")
+
+    @classmethod
+    def _requires_auth(cls, path: str) -> bool:
+        """Decide gating for an admin-relative path (mount prefix stripped)."""
+        normalized = "/" + path.strip("/")
+        if not normalized.startswith("/api/"):
+            return False
+        return normalized not in cls.AUTH_EXEMPT_PATHS
+
+    async def _authenticate(self, request: AuthRequest) -> AdminUser | None:
+        """Run the configured provider; ``None`` means 401."""
+        provider = self.auth_provider
+        if provider is None:
+            return AdminUser(id="anonymous")
+        return await provider.authenticate(request)
 
     # ------------------------------------------------------------------
     # Request parsing helpers

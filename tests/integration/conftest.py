@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 import uuid
 from datetime import date
 
 import httpx
+import pytest
 import pytest_asyncio
 
 from oxyde import db, execute_raw
@@ -114,37 +116,37 @@ def _register(admin) -> None:
     admin.register(Gadget)
 
 
-def build_fastapi():
+def build_fastapi(**admin_kwargs):
     from fastapi import FastAPI
 
     from oxyde_admin import FastAPIAdmin
 
-    admin = FastAPIAdmin(title="Test Admin")
+    admin = FastAPIAdmin(title="Test Admin", **admin_kwargs)
     _register(admin)
     outer = FastAPI()
     outer.mount("/admin", admin.app)
     return outer
 
 
-def build_litestar():
+def build_litestar(**admin_kwargs):
     from litestar import Litestar, asgi
 
     from oxyde_admin import LitestarAdmin
 
-    admin = LitestarAdmin(title="Test Admin")
+    admin = LitestarAdmin(title="Test Admin", **admin_kwargs)
     _register(admin)
     return Litestar(
         route_handlers=[asgi(path="/admin", is_mount=True, copy_scope=True)(admin.app)]
     )
 
 
-def build_sanic():
+def build_sanic(**admin_kwargs):
     import sanic
 
     from oxyde_admin import SanicAdmin
 
     sanic.Sanic.test_mode = True
-    admin = SanicAdmin(title="Test Admin", prefix="/admin")
+    admin = SanicAdmin(title="Test Admin", prefix="/admin", **admin_kwargs)
     _register(admin)
     app = sanic.Sanic("TestApp")
     admin.register_exception_handlers(app)
@@ -152,24 +154,24 @@ def build_sanic():
     return app
 
 
-def build_quart():
+def build_quart(**admin_kwargs):
     from quart import Quart
 
     from oxyde_admin import QuartAdmin
 
-    admin = QuartAdmin(title="Test Admin", prefix="/admin")
+    admin = QuartAdmin(title="Test Admin", prefix="/admin", **admin_kwargs)
     _register(admin)
     app = Quart(__name__)
     admin.init_app(app)
     return app
 
 
-def build_falcon():
+def build_falcon(**admin_kwargs):
     import falcon.asgi
 
     from oxyde_admin import FalconAdmin
 
-    admin = FalconAdmin(title="Test Admin", prefix="/admin")
+    admin = FalconAdmin(title="Test Admin", prefix="/admin", **admin_kwargs)
     _register(admin)
     app = falcon.asgi.App()
     admin.init_app(app)
@@ -220,11 +222,11 @@ class LifespanManager:
             await self._task
 
 
-@pytest_asyncio.fixture(params=sorted(ADAPTERS))
-async def client(request, database):
-    """HTTP client over the admin mounted at /admin, one param per framework."""
-    build, needs_lifespan = ADAPTERS[request.param]
-    app = build()
+@asynccontextmanager
+async def admin_client(adapter: str, **admin_kwargs):
+    """HTTP client over an admin app mounted at /admin."""
+    build, needs_lifespan = ADAPTERS[adapter]
+    app = build(**admin_kwargs)
     transport = httpx.ASGITransport(app=app)
     if needs_lifespan:
         async with LifespanManager(app):
@@ -235,3 +237,15 @@ async def client(request, database):
     else:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
             yield c
+
+
+@pytest.fixture(params=sorted(ADAPTERS))
+def adapter(request):
+    """Framework name; every dependent test runs once per adapter."""
+    return request.param
+
+
+@pytest_asyncio.fixture()
+async def client(adapter, database):
+    async with admin_client(adapter) as c:
+        yield c

@@ -3,7 +3,6 @@ from litestar import Litestar, asgi
 from oxyde import db
 
 from models import DB_URL
-from auth import login_handler, me_handler
 from routes import list_posts_handler, get_post_handler
 from admin import admin
 
@@ -20,8 +19,6 @@ async def on_shutdown() -> None:
 
 app = Litestar(
     route_handlers=[
-        login_handler,
-        me_handler,
         list_posts_handler,
         get_post_handler,
         admin_mount,

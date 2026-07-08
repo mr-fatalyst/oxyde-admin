@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import inspect
 import json as _json
 import mimetypes
 
 from quart import Quart, Blueprint, request, Response
 
 from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR, json_default
+from oxyde_admin.auth import AuthRequest
 
 
 def _json_response(body, status=200, headers=None):
@@ -107,26 +107,28 @@ class QuartAdmin(AbstractAdapter):
     def _build_blueprint(self) -> Blueprint:
         bp = Blueprint("oxyde_admin", __name__, url_prefix=self.prefix)
         admin = self
-        api_prefix = self.prefix.rstrip("/") + "/api/"
-        config_path = api_prefix.rstrip("/") + "/config"
+        prefix = self.prefix.rstrip("/")
 
         # -- Auth middleware ------------------------------------------------
 
-        if self.auth_check is not None:
-            check = self.auth_check
+        if self.auth_provider is not None:
 
             @bp.before_request
             async def auth_middleware():
-                path = request.path.rstrip("/")
-                if not path.startswith(api_prefix.rstrip("/")):
+                path = request.path
+                rel = path[len(prefix) :] if path.startswith(prefix) else path
+                if not admin._requires_auth(rel):
                     return None
-                if path == config_path:
-                    return None
-                if inspect.iscoroutinefunction(check):
-                    allowed = await check(request._get_current_object())
-                else:
-                    allowed = check(request._get_current_object())
-                if not allowed:
+                user = await admin._authenticate(
+                    AuthRequest(
+                        headers={k.lower(): v for k, v in request.headers.items()},
+                        cookies=dict(request.cookies),
+                        path=rel,
+                        method=request.method,
+                        native=request._get_current_object(),
+                    )
+                )
+                if user is None:
                     return _json_response({"detail": "Unauthorized"}, status=401)
                 return None
 
@@ -135,6 +137,11 @@ class QuartAdmin(AbstractAdapter):
         @bp.get("/api/config")
         async def admin_config():
             return _json_response(admin._build_config())
+
+        @bp.post("/api/login")
+        async def admin_login():
+            body = await request.get_json()
+            return _json_response(await admin._handle_login(body))
 
         @bp.get("/api/models")
         async def models_list():

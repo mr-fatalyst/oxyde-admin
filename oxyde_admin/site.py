@@ -4,15 +4,19 @@ import asyncio
 import csv
 import io
 import json as json_mod
+import warnings
 from typing import Any, Callable, TYPE_CHECKING
 
 from oxyde.models import iter_tables
 
 from oxyde_admin._version import __version__
+from oxyde_admin.auth import AuthProvider, _CallbackProvider, has_builtin_login
 from oxyde_admin.config import ModelAdmin, Preset, PrimaryColor, Surface
 from oxyde_admin.exceptions import (
     ExportNotAllowedError,
     ExportTooLargeError,
+    LoginFailedError,
+    LoginNotAvailableError,
     ModelNotFoundError,
 )
 from oxyde_admin.schema import build_schema
@@ -39,6 +43,7 @@ class AdminSite:
         per_page: int = 100,
         export_chunk_size: int = 10_000,
         max_export_rows: int = 100_000,
+        auth_provider: AuthProvider | None = None,
         auth_check: Callable | None = None,
         login_url: str | None = None,
     ) -> None:
@@ -50,6 +55,16 @@ class AdminSite:
         self.per_page = max(1, per_page)
         self.export_chunk_size = max(1, export_chunk_size)
         self.max_export_rows = max(1, max_export_rows)
+        self.auth_provider = auth_provider
+        # TODO(0.7.0): remove — auth_check deprecation tail
+        if auth_check is not None and auth_provider is None:
+            warnings.warn(
+                "auth_check is deprecated and will be removed in 0.7.0; "
+                "use auth_provider instead",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            self.auth_provider = _CallbackProvider(auth_check)
         self.auth_check = auth_check
         self.login_url = login_url
         self.version = __version__
@@ -340,6 +355,16 @@ class AdminSite:
         )
         return record.model_dump(exclude=self._exclude_set(config))
 
+    async def _handle_login(self, data: dict[str, Any] | None) -> dict[str, Any]:
+        provider = self.auth_provider
+        if provider is None or not has_builtin_login(provider):
+            raise LoginNotAvailableError("Built-in login is not enabled")
+        credentials = provider.credentials_model.model_validate(data or {})
+        token = await provider.login(credentials)
+        if token is None:
+            raise LoginFailedError("Invalid credentials")
+        return {"token": token}
+
     async def _handle_delete(self, model_name: str, pk: str) -> dict[str, Any]:
         from oxyde_admin.api.routes import delete_record
 
@@ -378,14 +403,27 @@ class AdminSite:
 
     def _build_config(self) -> dict:
         """Build config endpoint data."""
+        provider = self.auth_provider
+        builtin_login = provider is not None and has_builtin_login(provider)
         return {
             "title": self.title,
             "preset": self.preset,
             "primary_color": self.primary_color,
             "surface": self.surface,
             "version": self.version,
-            "auth_enabled": self.auth_check is not None,
+            # TODO(0.7.0): auth_enabled is superseded by the "auth" block
+            "auth_enabled": provider is not None,
             "login_url": self.login_url,
+            "auth": {
+                "enabled": provider is not None,
+                "login_url": self.login_url,
+                "builtin_login": builtin_login,
+                "credentials_schema": (
+                    provider.credentials_model.model_json_schema()
+                    if builtin_login
+                    else None
+                ),
+            },
             "per_page": self.per_page,
             "export_chunk_size": self.export_chunk_size,
             "max_export_rows": self.max_export_rows,

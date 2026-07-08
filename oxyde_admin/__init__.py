@@ -1,4 +1,10 @@
 from oxyde_admin._version import __version__
+from oxyde_admin.auth import (
+    AdminUser,
+    AuthProvider,
+    AuthRequest,
+    DefaultCredentials,
+)
 from oxyde_admin.config import Preset, PrimaryColor, Surface
 
 
@@ -41,6 +47,10 @@ except ImportError:
 
 __all__ = [
     "__version__",
+    "AdminUser",
+    "AuthProvider",
+    "AuthRequest",
+    "DefaultCredentials",
     "Preset",
     "PrimaryColor",
     "Surface",

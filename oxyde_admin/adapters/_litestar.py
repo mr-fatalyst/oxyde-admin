@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import inspect
-
 from litestar import Litestar, Request, get, post, patch, delete
 from litestar.params import Parameter
 from litestar.static_files import StaticFilesConfig
@@ -10,6 +8,7 @@ from litestar.response import Response, File, Stream
 from litestar.types import ASGIApp, Receive, Scope, Send
 
 from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
+from oxyde_admin.auth import AuthRequest
 
 
 class LitestarAdmin(AbstractAdapter):
@@ -19,7 +18,7 @@ class LitestarAdmin(AbstractAdapter):
         handlers = self._build_route_handlers()
 
         middleware = []
-        if self.auth_check is not None:
+        if self.auth_provider is not None:
             middleware.append(self._create_auth_middleware())
 
         exception_handlers = self._build_exception_handlers()
@@ -66,7 +65,7 @@ class LitestarAdmin(AbstractAdapter):
     # ------------------------------------------------------------------
 
     def _create_auth_middleware(self):
-        check = self.auth_check
+        admin = self
 
         def middleware_factory(app: ASGIApp) -> ASGIApp:
             async def middleware(scope: Scope, receive: Receive, send: Send) -> None:
@@ -75,17 +74,22 @@ class LitestarAdmin(AbstractAdapter):
                     return
 
                 path = scope.get("path", "")
-                if not path.startswith("/api/") or path.rstrip("/") == "/api/config":
+                if not admin._requires_auth(path):
                     await app(scope, receive, send)
                     return
 
                 request = Request(scope)
-                if inspect.iscoroutinefunction(check):
-                    allowed = await check(request)
-                else:
-                    allowed = check(request)
+                user = await admin._authenticate(
+                    AuthRequest(
+                        headers=dict(request.headers),
+                        cookies=request.cookies,
+                        path=path,
+                        method=request.method,
+                        native=request,
+                    )
+                )
 
-                if not allowed:
+                if user is None:
                     body = b'{"detail":"Unauthorized"}'
                     await send(
                         {
@@ -136,6 +140,10 @@ class LitestarAdmin(AbstractAdapter):
         @get("/api/config")
         async def admin_config() -> dict:
             return admin._build_config()
+
+        @post("/api/login", status_code=200)
+        async def admin_login(data: dict) -> dict:
+            return await admin._handle_login(data)
 
         @get("/api/models")
         async def models_list() -> list[dict]:
@@ -264,6 +272,7 @@ class LitestarAdmin(AbstractAdapter):
 
         return [
             admin_config,
+            admin_login,
             models_list,
             models_counts,
             model_schema,

@@ -1,6 +1,6 @@
 from oxyde_admin import FalconAdmin, Preset, PrimaryColor, Surface
 
-from auth import check_admin
+from auth import JWTAuthProvider
 from models import User, Category, Post, Comment, Tag, PostTag
 
 admin = FalconAdmin(
@@ -8,8 +8,7 @@ admin = FalconAdmin(
     preset=Preset.AURA,
     primary_color=PrimaryColor.SKY,
     surface=Surface.OCEAN,
-    auth_check=check_admin,
-    login_url="/auth/login",
+    auth_provider=JWTAuthProvider(),
 )
 
 admin.register(
@@ -18,7 +17,7 @@ admin.register(
     display_field="name",
     search_fields=["name", "email"],
     list_filter=["is_admin"],
-    readonly_fields=["password_hash"],
+    exclude_fields=["password_hash"],
     column_labels={"is_admin": "Admin"},
     group="Auth",
     icon="pi pi-users",

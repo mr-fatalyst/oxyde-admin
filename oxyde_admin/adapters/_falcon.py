@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import json as _json
 import mimetypes
 
@@ -8,6 +7,7 @@ import falcon
 import falcon.asgi
 
 from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR, json_default
+from oxyde_admin.auth import AuthRequest
 
 
 def _set_json(resp, body, status=200):
@@ -23,22 +23,27 @@ def _set_json(resp, body, status=200):
 
 
 class _AuthMiddleware:
-    def __init__(self, check, prefix):
-        self.check = check
-        self.api_prefix = prefix.rstrip("/") + "/api/"
-        self.config_path = self.api_prefix + "config"
+    def __init__(self, admin):
+        self.admin = admin
 
     async def process_request(self, req, resp):
-        path = req.path.rstrip("/")
-        if not path.startswith(self.api_prefix.rstrip("/")):
+        prefix = self.admin.prefix.rstrip("/")
+        path = req.path
+        if not path.startswith(prefix):
             return
-        if path == self.config_path:
+        rel = path[len(prefix) :]
+        if not self.admin._requires_auth(rel):
             return
-        if inspect.iscoroutinefunction(self.check):
-            allowed = await self.check(req)
-        else:
-            allowed = self.check(req)
-        if not allowed:
+        user = await self.admin._authenticate(
+            AuthRequest(
+                headers={k.lower(): v for k, v in req.headers.items()},
+                cookies=req.cookies,
+                path=rel,
+                method=req.method,
+                native=req,
+            )
+        )
+        if user is None:
             _set_json(resp, {"detail": "Unauthorized"}, status=401)
             resp.complete = True
 
@@ -54,6 +59,15 @@ class ConfigResource:
 
     async def on_get(self, req, resp):
         _set_json(resp, self.admin._build_config())
+
+
+class LoginResource:
+    def __init__(self, admin):
+        self.admin = admin
+
+    async def on_post(self, req, resp):
+        body = await req.get_media()
+        _set_json(resp, await self.admin._handle_login(body))
 
 
 class ModelsResource:
@@ -230,7 +244,7 @@ class FalconAdmin(AbstractAdapter):
 
     def init_app(self, app: falcon.asgi.App) -> None:
         """Register the admin on a Falcon ASGI application."""
-        if self.auth_check is not None:
+        if self.auth_provider is not None:
             self._register_auth_middleware(app)
         self._register_routes(app)
         self._register_exception_handlers(app)
@@ -246,11 +260,12 @@ class FalconAdmin(AbstractAdapter):
         return app
 
     def _register_auth_middleware(self, app) -> None:
-        app.add_middleware(_AuthMiddleware(self.auth_check, self.prefix))
+        app.add_middleware(_AuthMiddleware(self))
 
     def _register_routes(self, app) -> None:
         p = self.prefix.rstrip("/")
         app.add_route(f"{p}/api/config", ConfigResource(self))
+        app.add_route(f"{p}/api/login", LoginResource(self))
         app.add_route(f"{p}/api/models", ModelsResource(self))
         app.add_route(f"{p}/api/models/counts", ModelsCountsResource(self))
         app.add_route(f"{p}/api/{{model_name}}/schema", SchemaResource(self))

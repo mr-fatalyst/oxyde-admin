@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import (
@@ -13,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from oxyde_admin.adapters.base import AbstractAdapter, STATIC_DIR
+from oxyde_admin.auth import AuthRequest
 
 
 class FastAPIAdmin(AbstractAdapter):
@@ -25,7 +25,7 @@ class FastAPIAdmin(AbstractAdapter):
     def _build_app(self) -> FastAPI:
         app = FastAPI(title="Oxyde Admin", docs_url=None, redoc_url=None)
 
-        if self.auth_check is not None:
+        if self.auth_provider is not None:
             self._register_auth_middleware(app)
 
         self._register_exception_handlers(app)
@@ -35,7 +35,7 @@ class FastAPIAdmin(AbstractAdapter):
         return app
 
     def _register_auth_middleware(self, app: FastAPI) -> None:
-        check = self.auth_check
+        admin = self
 
         async def auth_middleware(request: Request, call_next):
             root = request.scope.get("root_path", "")
@@ -45,13 +45,18 @@ class FastAPIAdmin(AbstractAdapter):
                 if root and raw_path.startswith(root)
                 else raw_path
             )
-            if not path.startswith("/api/") or path == "/api/config":
+            if not admin._requires_auth(path):
                 return await call_next(request)
-            if inspect.iscoroutinefunction(check):
-                allowed = await check(request)
-            else:
-                allowed = check(request)
-            if not allowed:
+            user = await admin._authenticate(
+                AuthRequest(
+                    headers=dict(request.headers),
+                    cookies=request.cookies,
+                    path=path,
+                    method=request.method,
+                    native=request,
+                )
+            )
+            if user is None:
                 return JSONResponse({"detail": "Unauthorized"}, status_code=401)
             return await call_next(request)
 
@@ -73,6 +78,12 @@ class FastAPIAdmin(AbstractAdapter):
         @app.get("/api/config")
         async def admin_config() -> dict:
             return self._build_config()
+
+        # FastAPI matches routes in registration order: /api/login must be
+        # registered before POST /api/{model_name}
+        @app.post("/api/login", response_model=None)
+        async def admin_login(request: Request):
+            return await self._handle_login(await request.json())
 
         @app.get("/api/models")
         async def models_list() -> list[dict]:
