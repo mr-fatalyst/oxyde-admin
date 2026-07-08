@@ -85,8 +85,8 @@ class ModelResource:
         self.admin = admin
 
     async def on_get(self, req, resp, model_name):
-        page = int(req.get_param("page") or 1)
-        per_page = int(req.get_param("per_page") or 25)
+        page = self.admin._int_param(req.params, "page", 1)
+        per_page = self.admin._int_param(req.params, "per_page", 25)
         ordering = req.get_param("ordering")
         search = req.get_param("search")
         _set_json(
@@ -131,7 +131,7 @@ class OptionsResource:
 
     async def on_get(self, req, resp, model_name):
         search = req.get_param("search")
-        limit = int(req.get_param("limit") or 25)
+        limit = self.admin._int_param(req.params, "limit", 25)
         include = req.get_param("include")
         include_list = include.split(",") if include else None
         _set_json(
@@ -184,7 +184,9 @@ class BulkDeleteResource:
         body = await req.get_media()
         _set_json(
             resp,
-            await self.admin._handle_bulk_delete(model_name, body["ids"]),
+            await self.admin._handle_bulk_delete(
+                model_name, self.admin._bulk_ids(body)
+            ),
         )
 
 
@@ -194,13 +196,10 @@ class BulkUpdateResource:
 
     async def on_post(self, req, resp, model_name):
         body = await req.get_media()
+        ids, data = self.admin._bulk_payload(body)
         _set_json(
             resp,
-            await self.admin._handle_bulk_update(
-                model_name,
-                body["ids"],
-                body["data"],
-            ),
+            await self.admin._handle_bulk_update(model_name, ids, data),
         )
 
 

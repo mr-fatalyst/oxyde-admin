@@ -161,12 +161,13 @@ class FastAPIAdmin(AbstractAdapter):
         @app.post("/api/{model_name}/bulk-delete", response_model=None)
         async def model_bulk_delete(model_name: str, request: Request):
             body = await request.json()
-            return await self._handle_bulk_delete(model_name, body["ids"])
+            return await self._handle_bulk_delete(model_name, self._bulk_ids(body))
 
         @app.post("/api/{model_name}/bulk-update", response_model=None)
         async def model_bulk_update(model_name: str, request: Request):
             body = await request.json()
-            return await self._handle_bulk_update(model_name, body["ids"], body["data"])
+            ids, data = self._bulk_payload(body)
+            return await self._handle_bulk_update(model_name, ids, data)
 
     def _register_static(self, app: FastAPI) -> None:
         assets_dir = STATIC_DIR / "assets"

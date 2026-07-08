@@ -10,35 +10,22 @@ from oxyde.models import iter_tables
 
 from oxyde_admin._version import __version__
 from oxyde_admin.config import ModelAdmin, Preset, PrimaryColor, Surface
+from oxyde_admin.exceptions import (
+    ExportNotAllowedError,
+    ExportTooLargeError,
+    ModelNotFoundError,
+)
 from oxyde_admin.schema import build_schema
 
 if TYPE_CHECKING:
     from oxyde.models import Model
 
-
-class ModelNotFoundError(Exception):
-    """Raised when a model is not found in the registry."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-        super().__init__(f"Model '{name}' not found")
-
-
-class ExportNotAllowedError(Exception):
-    """Raised when export is disabled for a model."""
-
-    def __init__(self, name: str) -> None:
-        self.name = name
-        super().__init__(f"Export is not allowed for '{name}'")
-
-
-class ExportTooLargeError(Exception):
-    """Raised when export exceeds the maximum allowed rows."""
-
-    def __init__(self, total: int, limit: int) -> None:
-        self.total = total
-        self.limit = limit
-        super().__init__(f"Export too large: {total} rows exceed the limit of {limit}")
+__all__ = [
+    "AdminSite",
+    "ExportNotAllowedError",
+    "ExportTooLargeError",
+    "ModelNotFoundError",
+]
 
 
 class AdminSite:
@@ -184,7 +171,7 @@ class AdminSite:
         ids: list | None = None,
     ) -> tuple[Any, str, str]:
         """Returns ``(async_generator, media_type, filename)``."""
-        from oxyde_admin.api.routes import list_records, _get_pk_field
+        from oxyde_admin.api.routes import list_records, _cast_pk_list, _get_pk_field
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
@@ -201,7 +188,7 @@ class AdminSite:
         )
         if ids:
             pk_name, pk_type = _get_pk_field(model)
-            typed_ids = [pk_type(i) for i in ids]
+            typed_ids = _cast_pk_list(pk_type, ids)
             filters = filters or {}
             filters[f"{pk_name}__in"] = typed_ids
         search_flds = config.search_fields if config else None

@@ -8,7 +8,8 @@ import uuid
 
 import pytest
 
-from oxyde_admin.adapters.base import json_default
+from oxyde_admin.adapters.base import AbstractAdapter, json_default
+from oxyde_admin.exceptions import InvalidParameterError
 from oxyde_admin.site import AdminSite
 from oxyde_admin.config import Preset, PrimaryColor, Surface
 
@@ -89,6 +90,37 @@ class TestBuildModelsList:
         assert entry["exportable"] is False
         assert entry["group"] == "Auth"
         assert entry["icon"] == "pi pi-users"
+
+
+class TestRequestParsingHelpers:
+    def test_int_param_default_on_missing(self):
+        assert AbstractAdapter._int_param({}, "page", 1) == 1
+        assert AbstractAdapter._int_param({"page": ""}, "page", 1) == 1
+
+    def test_int_param_parses(self):
+        assert AbstractAdapter._int_param({"page": "7"}, "page", 1) == 7
+
+    def test_int_param_garbage_raises(self):
+        with pytest.raises(InvalidParameterError, match="page"):
+            AbstractAdapter._int_param({"page": "abc"}, "page", 1)
+
+    def test_bulk_ids(self):
+        assert AbstractAdapter._bulk_ids({"ids": [1, 2]}) == [1, 2]
+
+    def test_bulk_ids_invalid_shapes_raise(self):
+        for body in ({}, {"ids": "1,2"}, None, []):
+            with pytest.raises(InvalidParameterError, match="ids"):
+                AbstractAdapter._bulk_ids(body)
+
+    def test_bulk_payload(self):
+        ids, data = AbstractAdapter._bulk_payload({"ids": [1], "data": {"a": 1}})
+
+        assert ids == [1]
+        assert data == {"a": 1}
+
+    def test_bulk_payload_missing_data_raises(self):
+        with pytest.raises(InvalidParameterError, match="data"):
+            AbstractAdapter._bulk_payload({"ids": [1]})
 
 
 class TestJsonDefault:

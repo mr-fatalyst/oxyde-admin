@@ -221,13 +221,12 @@ class LitestarAdmin(AbstractAdapter):
 
         @post("/api/{model_name:str}/bulk-delete", status_code=200)
         async def model_bulk_delete(model_name: str, data: dict) -> dict:
-            return await admin._handle_bulk_delete(model_name, data["ids"])
+            return await admin._handle_bulk_delete(model_name, admin._bulk_ids(data))
 
         @post("/api/{model_name:str}/bulk-update", status_code=200)
         async def model_bulk_update(model_name: str, data: dict) -> dict:
-            return await admin._handle_bulk_update(
-                model_name, data["ids"], data["data"]
-            )
+            ids, payload = admin._bulk_payload(data)
+            return await admin._handle_bulk_update(model_name, ids, payload)
 
         # -- SPA catch-all -------------------------------------------------
 

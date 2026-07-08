@@ -10,13 +10,15 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from oxyde.exceptions import NotFoundError, IntegrityError
-from oxyde_admin.site import (
-    AdminSite,
+from oxyde_admin.exceptions import (
+    ConflictError,
     ExportNotAllowedError,
     ExportTooLargeError,
+    InvalidParameterError,
     ModelNotFoundError,
+    RecordNotFoundError,
 )
+from oxyde_admin.site import AdminSite
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -42,12 +44,16 @@ class AbstractAdapter(AdminSite, ABC):
     the admin site to a specific web framework.
     """
 
+    # Admin-owned exceptions only; the data layer translates ORM errors into
+    # these, so the HTTP layer never imports data-source exception types.
+    # Pydantic is a core dependency of the admin itself, not a data source.
     EXCEPTION_MAP: dict[type[Exception], tuple[int, Any]] = {
         ModelNotFoundError: (404, str),
-        NotFoundError: (404, str),
+        RecordNotFoundError: (404, str),
         ExportNotAllowedError: (403, str),
         ExportTooLargeError: (400, str),
-        IntegrityError: (409, str),
+        ConflictError: (409, str),
+        InvalidParameterError: (400, str),
         ValidationError: (422, lambda exc: exc.errors()),
     }
 
@@ -89,6 +95,38 @@ class AbstractAdapter(AdminSite, ABC):
     def _register_static(self, app) -> None:
         """Register static file serving and SPA catch-all on the application."""
         ...
+
+    # ------------------------------------------------------------------
+    # Request parsing helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _int_param(params, name: str, default: int) -> int:
+        """Parse an integer query parameter; garbage is a 400, not a 500."""
+        raw = params.get(name)
+        if raw is None or raw == "":
+            return default
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            raise InvalidParameterError(
+                f"Query parameter '{name}' must be an integer"
+            ) from None
+
+    @staticmethod
+    def _bulk_ids(body: Any) -> list:
+        """Extract the ``ids`` list from a bulk request body."""
+        if not isinstance(body, dict) or not isinstance(body.get("ids"), list):
+            raise InvalidParameterError("Request body must contain an 'ids' list")
+        return body["ids"]
+
+    @classmethod
+    def _bulk_payload(cls, body: Any) -> tuple[list, dict]:
+        """Extract ``ids`` and ``data`` from a bulk-update request body."""
+        ids = cls._bulk_ids(body)
+        if not isinstance(body.get("data"), dict):
+            raise InvalidParameterError("Request body must contain a 'data' object")
+        return ids, body["data"]
 
     # ------------------------------------------------------------------
     # SPA serving helpers

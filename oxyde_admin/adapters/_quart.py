@@ -150,8 +150,10 @@ class QuartAdmin(AbstractAdapter):
 
         @bp.get("/api/<model_name>")
         async def model_list(model_name: str):
-            page = request.args.get("page", 1, type=int)
-            per_page = request.args.get("per_page", 25, type=int)
+            # not args.get(..., type=int): that silently falls back to the
+            # default on garbage instead of reporting a 400
+            page = admin._int_param(request.args, "page", 1)
+            per_page = admin._int_param(request.args, "per_page", 25)
             ordering = request.args.get("ordering")
             search = request.args.get("search")
             return _json_response(
@@ -168,7 +170,7 @@ class QuartAdmin(AbstractAdapter):
         @bp.get("/api/<model_name>/options")
         async def model_options(model_name: str):
             search = request.args.get("search")
-            limit = request.args.get("limit", 25, type=int)
+            limit = admin._int_param(request.args, "limit", 25)
             include = request.args.get("include")
             include_list = include.split(",") if include else None
             return _json_response(
@@ -229,14 +231,14 @@ class QuartAdmin(AbstractAdapter):
         async def model_bulk_delete(model_name: str):
             body = await request.get_json()
             return _json_response(
-                await admin._handle_bulk_delete(model_name, body["ids"])
+                await admin._handle_bulk_delete(model_name, admin._bulk_ids(body))
             )
 
         @bp.post("/api/<model_name>/bulk-update")
         async def model_bulk_update(model_name: str):
-            body = await request.get_json()
+            ids, data = admin._bulk_payload(await request.get_json())
             return _json_response(
-                await admin._handle_bulk_update(model_name, body["ids"], body["data"])
+                await admin._handle_bulk_update(model_name, ids, data)
             )
 
         # -- Static & SPA -------------------------------------------------

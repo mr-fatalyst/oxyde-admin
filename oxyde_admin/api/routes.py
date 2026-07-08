@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
@@ -7,10 +8,52 @@ from typing import Any, TYPE_CHECKING
 from pydantic import TypeAdapter
 
 from oxyde import atomic
+from oxyde.exceptions import IntegrityError, NotFoundError
 from oxyde.models import registered_tables
+
+from oxyde_admin.exceptions import (
+    ConflictError,
+    InvalidParameterError,
+    RecordNotFoundError,
+)
 
 if TYPE_CHECKING:
     from oxyde.models import Model
+
+
+def _translates_data_errors(fn):
+    """Translate ORM exceptions into admin-owned ones.
+
+    Adapters map only admin exceptions to HTTP responses; the data layer is
+    the single place that knows what the ORM raises.
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except NotFoundError as exc:
+            raise RecordNotFoundError(str(exc)) from exc
+        except IntegrityError as exc:
+            raise ConflictError(str(exc)) from exc
+
+    return wrapper
+
+
+def _cast_pk(pk_type: type, value: Any) -> Any:
+    """Cast a URL path PK; an unparseable value means "no such record"."""
+    try:
+        return pk_type(value)
+    except (TypeError, ValueError) as exc:
+        raise RecordNotFoundError(f"Invalid primary key value: {value!r}") from exc
+
+
+def _cast_pk_list(pk_type: type, values: list[Any]) -> list[Any]:
+    """Cast a list of PKs coming from a request body or query string."""
+    try:
+        return [pk_type(v) for v in values]
+    except (TypeError, ValueError) as exc:
+        raise InvalidParameterError(f"Invalid primary key in 'ids': {exc}") from exc
 
 
 @dataclass
@@ -59,6 +102,7 @@ async def list_records(
     return PaginatedResult(items=items, total=total, page=page, per_page=per_page)
 
 
+@_translates_data_errors
 async def get_record(
     model: type[Model],
     pk: Any,
@@ -68,9 +112,10 @@ async def get_record(
     query = model.objects
     if m2m_fields:
         query = query.prefetch(*m2m_fields)
-    return await query.filter(**{name: pk_type(pk)}).get()
+    return await query.filter(**{name: _cast_pk(pk_type, pk)}).get()
 
 
+@_translates_data_errors
 async def create_record(
     model: type[Model],
     data: dict[str, Any],
@@ -97,6 +142,7 @@ async def create_record(
     return record
 
 
+@_translates_data_errors
 async def update_record(
     model: type[Model],
     pk: Any,
@@ -105,7 +151,7 @@ async def update_record(
     m2m_data: dict[str, list] | None = None,
 ) -> Model:
     name, pk_type = _get_pk_field(model)
-    record = await model.objects.get(**{name: pk_type(pk)})
+    record = await model.objects.get(**{name: _cast_pk(pk_type, pk)})
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}
@@ -128,23 +174,26 @@ async def update_record(
     return record
 
 
+@_translates_data_errors
 async def delete_record(
     model: type[Model],
     pk: Any,
 ) -> int:
     name, pk_type = _get_pk_field(model)
-    return await model.objects.filter(**{name: pk_type(pk)}).delete()
+    return await model.objects.filter(**{name: _cast_pk(pk_type, pk)}).delete()
 
 
+@_translates_data_errors
 async def bulk_delete(
     model: type[Model],
     ids: list[Any],
 ) -> int:
     name, pk_type = _get_pk_field(model)
-    typed_ids = [pk_type(i) for i in ids]
+    typed_ids = _cast_pk_list(pk_type, ids)
     return await model.objects.filter(**{f"{name}__in": typed_ids}).delete()
 
 
+@_translates_data_errors
 async def bulk_update(
     model: type[Model],
     ids: list[Any],
@@ -153,7 +202,7 @@ async def bulk_update(
     m2m_data: dict[str, list] | None = None,
 ) -> int:
     name, pk_type = _get_pk_field(model)
-    typed_ids = [pk_type(i) for i in ids]
+    typed_ids = _cast_pk_list(pk_type, ids)
     blocked = set(readonly_fields or [])
     blocked.add(name)
     clean = {k: v for k, v in data.items() if k not in blocked}

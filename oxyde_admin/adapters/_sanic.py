@@ -156,8 +156,8 @@ class SanicAdmin(AbstractAdapter):
 
         @bp.get("/api/<model_name:str>")
         async def model_list(request: Request, model_name: str):
-            page = int(request.args.get("page", 1))
-            per_page = int(request.args.get("per_page", 25))
+            page = admin._int_param(request.args, "page", 1)
+            per_page = admin._int_param(request.args, "per_page", 25)
             ordering = request.args.get("ordering")
             search = request.args.get("search")
             return json(
@@ -174,7 +174,7 @@ class SanicAdmin(AbstractAdapter):
         @bp.get("/api/<model_name:str>/options")
         async def model_options(request: Request, model_name: str):
             search = request.args.get("search")
-            limit = int(request.args.get("limit", 25))
+            limit = admin._int_param(request.args, "limit", 25)
             include = request.args.get("include")
             include_list = include.split(",") if include else None
             return json(
@@ -229,14 +229,14 @@ class SanicAdmin(AbstractAdapter):
         @bp.post("/api/<model_name:str>/bulk-delete")
         async def model_bulk_delete(request: Request, model_name: str):
             body = request.json
-            return json(await admin._handle_bulk_delete(model_name, body["ids"]))
+            return json(
+                await admin._handle_bulk_delete(model_name, admin._bulk_ids(body))
+            )
 
         @bp.post("/api/<model_name:str>/bulk-update")
         async def model_bulk_update(request: Request, model_name: str):
-            body = request.json
-            return json(
-                await admin._handle_bulk_update(model_name, body["ids"], body["data"])
-            )
+            ids, data = admin._bulk_payload(request.json)
+            return json(await admin._handle_bulk_update(model_name, ids, data))
 
         # -- Static & SPA -------------------------------------------------
 
