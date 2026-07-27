@@ -131,6 +131,38 @@ class AdminSite:
         blocked = (config.readonly_fields or []) + (config.exclude_fields or [])
         return blocked or None
 
+    def _dump_exclude(self, model) -> dict[str, Any] | None:
+        """Build the ``model_dump`` exclude mapping for a model.
+
+        Own excluded fields, plus the excluded fields of every relation
+        target: nested records are serialized in full, so without this the
+        target's own exclusions leak through the relation.
+
+        One level deep — the data layer never joins or prefetches further.
+        Extend to a recursive walk (with cycle protection) if it ever does.
+        """
+        from oxyde_admin.api.routes import get_relation_targets
+
+        config = self._registry.get(model)
+        own = self._exclude_set(config) or ()
+        exclude: dict[str, Any] = {name: True for name in own}
+        for field_name, relation in get_relation_targets(model).items():
+            if field_name in exclude:
+                continue  # the whole relation is dropped anyway
+            target_config = self._registry.get(relation.model)
+            nested = target_config.exclude_fields if target_config else None
+            if not nested:
+                continue
+            # A prefetched relation is a list, a joined FK a single object.
+            exclude[field_name] = (
+                {"__all__": set(nested)} if relation.is_collection else set(nested)
+            )
+        return exclude or None
+
+    def _dump(self, model, record) -> dict[str, Any]:
+        """Serialize a single record through the model's exclude mapping."""
+        return record.model_dump(exclude=self._dump_exclude(model))
+
     @classmethod
     def _strip_excluded(
         cls, data: dict[str, Any], config: ModelAdmin | None
@@ -181,7 +213,7 @@ class AdminSite:
             search_fields=config.search_fields if config else None,
         )
         fk_labels = await resolve_fk_labels(model, result.items, self._registry)
-        exclude = self._exclude_set(config)
+        exclude = self._dump_exclude(model)
         return {
             "items": [item.model_dump(exclude=exclude) for item in result.items],
             "total": result.total,
@@ -250,7 +282,7 @@ class AdminSite:
         if total > self.max_export_rows:
             raise ExportTooLargeError(total, self.max_export_rows)
 
-        exclude = self._exclude_set(config)
+        exclude = self._dump_exclude(model)
         chunk = self.export_chunk_size
         common = dict(
             ordering=order_list,
@@ -316,9 +348,8 @@ class AdminSite:
         from oxyde_admin.api.routes import get_record
 
         model = self._require_model(model_name)
-        config = self._registry.get(model)
         record = await get_record(model, pk)
-        return record.model_dump(exclude=self._exclude_set(config))
+        return self._dump(model, record)
 
     async def _handle_create(
         self, model_name: str, data: dict[str, Any]
@@ -335,7 +366,7 @@ class AdminSite:
             readonly_fields=self._blocked_fields(config),
             m2m_data=m2m_data,
         )
-        return record.model_dump(exclude=self._exclude_set(config))
+        return self._dump(model, record)
 
     async def _handle_update(
         self, model_name: str, pk: str, data: dict[str, Any]
@@ -353,7 +384,7 @@ class AdminSite:
             readonly_fields=self._blocked_fields(config),
             m2m_data=m2m_data,
         )
-        return record.model_dump(exclude=self._exclude_set(config))
+        return self._dump(model, record)
 
     async def _handle_login(self, data: dict[str, Any] | None) -> dict[str, Any]:
         provider = self.auth_provider

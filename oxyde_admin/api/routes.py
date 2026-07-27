@@ -56,6 +56,19 @@ def _cast_pk_list(pk_type: type, values: list[Any]) -> list[Any]:
         raise InvalidParameterError(f"Invalid primary key in 'ids': {exc}") from exc
 
 
+@dataclass(frozen=True)
+class RelationTarget:
+    """A model reachable from a relation attribute.
+
+    ``is_collection`` distinguishes the ``prefetch()`` shapes (M2M and
+    reverse FK, serialized as lists) from a ``join()``-ed FK, serialized as
+    a single nested object.
+    """
+
+    model: type[Model]
+    is_collection: bool
+
+
 @dataclass
 class PaginatedResult:
     items: list[Any]
@@ -284,7 +297,6 @@ async def resolve_fk_labels(
     if not fk_fields:
         return {}
 
-    tables = registered_tables()
     result = {}
 
     async def _resolve(col_name, col_meta):
@@ -293,13 +305,7 @@ async def resolve_fk_labels(
         ids.discard(None)
         if not ids:
             return
-        target_key = col_meta.foreign_key.target
-        target = tables.get(target_key)
-        if target is None:
-            for key, m in tables.items():
-                if key.endswith(f".{target_key}") or m.__name__ == target_key:
-                    target = m
-                    break
+        target = _resolve_target_model(col_meta.foreign_key.target)
         if target is None:
             return
         config = registry.get(target)
@@ -360,13 +366,53 @@ def _get_m2m_fields(model: type[Model]) -> list[str]:
     ]
 
 
+def get_relation_targets(model: type[Model]) -> dict[str, RelationTarget]:
+    """Map each relation attribute of a model to the model it points at.
+
+    Covers every shape that can nest another model into ``model_dump()``:
+    a single FK object populated by ``join()`` — FK metadata lives on the
+    columns, not in ``relations`` — plus M2M and reverse-FK lists populated
+    by ``prefetch()``. Unresolvable targets are skipped: a relation the data
+    layer cannot follow is not one the caller can say anything about either.
+    """
+    targets: dict[str, RelationTarget] = {}
+    for name, col in model._db_meta.field_metadata.items():
+        if col.foreign_key is None:
+            continue
+        target = _resolve_target_model(col.foreign_key.target)
+        if target is not None:
+            targets[name] = RelationTarget(model=target, is_collection=False)
+    for name, rel in model._db_meta.relations.items():
+        if not rel.target:
+            continue
+        target = _resolve_target_model(rel.target)
+        if target is not None:
+            targets[name] = RelationTarget(model=target, is_collection=True)
+    return targets
+
+
+def _resolve_target_model(target: str) -> type[Model] | None:
+    """Resolve a relation target to a model class, or *None*.
+
+    Targets come in two shapes: FK metadata carries a fully-qualified key
+    ("app.models.Author"), relation metadata a bare class name ("Tag").
+    """
+    tables = registered_tables()
+    model = tables.get(target)
+    if model is not None:
+        return model
+    for key, candidate in tables.items():
+        if key.endswith(f".{target}") or candidate.__name__ == target:
+            return candidate
+    return None
+
+
 def _resolve_model_by_name(name: str) -> type[Model]:
     """Find a model by class name in the registry."""
-    tables = registered_tables()
-    for key, model in tables.items():
-        if key.endswith(f".{name}") or model.__name__ == name:
-            return model
-    raise ValueError(f"Model '{name}' not found in registry")
+    model = _resolve_target_model(name)
+    if model is None:
+        raise ValueError(f"Model '{name}' not found in registry")
+    return model
 
 
 async def _sync_m2m_bulk(
