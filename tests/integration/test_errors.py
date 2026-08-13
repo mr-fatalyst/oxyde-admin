@@ -11,7 +11,14 @@ from __future__ import annotations
 
 import pytest
 
+from tests.integration.models import BookTag
+
 pytestmark = pytest.mark.asyncio
+
+
+async def _dune(client) -> dict:
+    r = await client.get("/admin/api/books", params={"search": "dune"})
+    return r.json()["items"][0]
 
 
 async def test_missing_record_is_404(client):
@@ -75,4 +82,51 @@ async def test_bulk_update_without_data_is_400(client):
 async def test_bulk_delete_uncastable_id_is_400(client):
     r = await client.post("/admin/api/books/bulk-delete", json={"ids": ["abc"]})
 
+    assert r.status_code == 400
+
+
+async def test_m2m_non_list_is_422_and_keeps_relations(client):
+    """A garbage M2M value used to answer 200 and wipe every junction row."""
+    dune = await _dune(client)
+    before = await BookTag.objects.filter(book_id=dune["id"]).count()
+    assert before, "the fixture book must start with tags"
+
+    r = await client.patch(f"/admin/api/books/{dune['id']}", json={"tags": "bad"})
+
+    assert r.status_code == 422
+    assert await BookTag.objects.filter(book_id=dune["id"]).count() == before
+
+
+async def test_m2m_uncastable_id_is_422_and_keeps_relations(client):
+    dune = await _dune(client)
+    before = await BookTag.objects.filter(book_id=dune["id"]).count()
+
+    r = await client.patch(f"/admin/api/books/{dune['id']}", json={"tags": ["nope"]})
+
+    assert r.status_code == 422
+    assert await BookTag.objects.filter(book_id=dune["id"]).count() == before
+
+
+async def test_m2m_string_is_not_split_into_ids(client):
+    """A digit string is a bad value, not a shorthand for two ids."""
+    dune = await _dune(client)
+
+    r = await client.patch(f"/admin/api/books/{dune['id']}", json={"tags": "12"})
+
+    assert r.status_code == 422
+
+
+async def test_write_body_must_be_an_object(client):
+    dune = await _dune(client)
+
+    r = await client.patch(f"/admin/api/books/{dune['id']}", json=["nope"])
+    assert r.status_code == 400
+    assert "detail" in r.json()
+
+    r = await client.post("/admin/api/books", json=["nope"])
+    assert r.status_code == 400
+
+    r = await client.post(
+        "/admin/api/books/bulk-update", json={"ids": [dune["id"]], "data": ["nope"]}
+    )
     assert r.status_code == 400

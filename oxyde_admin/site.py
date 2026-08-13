@@ -10,11 +10,27 @@ from typing import Any, Callable, TYPE_CHECKING
 from oxyde.models import iter_tables
 
 from oxyde_admin._version import __version__
+from oxyde_admin.api.routes import (
+    _cast_pk_list,
+    _get_pk_field,
+    bulk_delete,
+    bulk_update,
+    create_record,
+    delete_record,
+    get_options,
+    get_record,
+    get_relation_targets,
+    list_records,
+    resolve_fk_labels,
+    split_m2m_payload,
+    update_record,
+)
 from oxyde_admin.auth import AuthProvider, _CallbackProvider, has_builtin_login
 from oxyde_admin.config import ModelAdmin, Preset, PrimaryColor, Surface
 from oxyde_admin.exceptions import (
     ExportNotAllowedError,
     ExportTooLargeError,
+    InvalidParameterError,
     LoginFailedError,
     LoginNotAvailableError,
     ModelNotFoundError,
@@ -141,8 +157,6 @@ class AdminSite:
         One level deep — the data layer never joins or prefetches further.
         Extend to a recursive walk (with cycle protection) if it ever does.
         """
-        from oxyde_admin.api.routes import get_relation_targets
-
         config = self._registry.get(model)
         own = self._exclude_set(config) or ()
         exclude: dict[str, Any] = {name: True for name in own}
@@ -162,6 +176,13 @@ class AdminSite:
     def _dump(self, model, record) -> dict[str, Any]:
         """Serialize a single record through the model's exclude mapping."""
         return record.model_dump(exclude=self._dump_exclude(model))
+
+    @staticmethod
+    def _require_object(data: Any) -> dict[str, Any]:
+        """A write payload is a JSON object; anything else is a bad request."""
+        if not isinstance(data, dict):
+            raise InvalidParameterError("Request body must be a JSON object")
+        return data
 
     @classmethod
     def _strip_excluded(
@@ -191,7 +212,6 @@ class AdminSite:
         ordering: str | None = None,
         search: str | None = None,
     ) -> dict[str, Any]:
-        from oxyde_admin.api.routes import list_records, resolve_fk_labels
 
         page = max(1, page)
         per_page = max(1, min(per_page or self.per_page, self.per_page))
@@ -229,7 +249,6 @@ class AdminSite:
         limit: int = 25,
         include: list[str] | None = None,
     ) -> list[dict[str, Any]]:
-        from oxyde_admin.api.routes import get_options
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
@@ -249,8 +268,6 @@ class AdminSite:
         ids: list | None = None,
     ) -> tuple[Any, str, str]:
         """Returns ``(async_generator, media_type, filename)``."""
-        from oxyde_admin.api.routes import list_records, _cast_pk_list, _get_pk_field
-
         model = self._require_model(model_name)
         config = self._registry.get(model)
         if config and not config.exportable:
@@ -345,8 +362,6 @@ class AdminSite:
         return csv_stream(), media_type, filename
 
     async def _handle_get(self, model_name: str, pk: str) -> dict[str, Any]:
-        from oxyde_admin.api.routes import get_record
-
         model = self._require_model(model_name)
         record = await get_record(model, pk)
         return self._dump(model, record)
@@ -354,12 +369,11 @@ class AdminSite:
     async def _handle_create(
         self, model_name: str, data: dict[str, Any]
     ) -> dict[str, Any]:
-        from oxyde_admin.api.routes import create_record
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
-        data = self._strip_excluded(data, config)
-        clean, m2m_data = self._extract_m2m(model, data)
+        data = self._strip_excluded(self._require_object(data), config)
+        clean, m2m_data = split_m2m_payload(model, data)
         record = await create_record(
             model,
             clean,
@@ -371,12 +385,11 @@ class AdminSite:
     async def _handle_update(
         self, model_name: str, pk: str, data: dict[str, Any]
     ) -> dict[str, Any]:
-        from oxyde_admin.api.routes import update_record
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
-        data = self._strip_excluded(data, config)
-        clean, m2m_data = self._extract_m2m(model, data)
+        data = self._strip_excluded(self._require_object(data), config)
+        clean, m2m_data = split_m2m_payload(model, data)
         record = await update_record(
             model,
             pk,
@@ -397,15 +410,11 @@ class AdminSite:
         return {"token": token}
 
     async def _handle_delete(self, model_name: str, pk: str) -> dict[str, Any]:
-        from oxyde_admin.api.routes import delete_record
-
         model = self._require_model(model_name)
         count = await delete_record(model, pk)
         return {"deleted": count}
 
     async def _handle_bulk_delete(self, model_name: str, ids: list) -> dict[str, Any]:
-        from oxyde_admin.api.routes import bulk_delete
-
         model = self._require_model(model_name)
         count = await bulk_delete(model, ids)
         return {"deleted": count}
@@ -413,12 +422,11 @@ class AdminSite:
     async def _handle_bulk_update(
         self, model_name: str, ids: list, data: dict[str, Any]
     ) -> dict[str, Any]:
-        from oxyde_admin.api.routes import bulk_update
 
         model = self._require_model(model_name)
         config = self._registry.get(model)
-        data = self._strip_excluded(data, config)
-        clean, m2m_data = self._extract_m2m(model, data)
+        data = self._strip_excluded(self._require_object(data), config)
+        clean, m2m_data = split_m2m_payload(model, data)
         count = await bulk_update(
             model,
             ids,
@@ -494,27 +502,6 @@ class AdminSite:
     # ------------------------------------------------------------------
     # Filter extraction
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _extract_m2m(
-        model, data: dict[str, Any]
-    ) -> tuple[dict[str, Any], dict[str, list] | None]:
-        """Separate M2M fields from regular data."""
-        m2m_names = {
-            name
-            for name, rel in model._db_meta.relations.items()
-            if rel.kind == "many_to_many"
-        }
-        if not m2m_names:
-            return data, None
-        clean = {}
-        m2m_data = {}
-        for k, v in data.items():
-            if k in m2m_names:
-                m2m_data[k] = v if isinstance(v, list) else []
-            else:
-                clean[k] = v
-        return clean, m2m_data or None
 
     @staticmethod
     def _extract_filters(

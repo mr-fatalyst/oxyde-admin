@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from pydantic import TypeAdapter
 from oxyde import atomic
 from oxyde.exceptions import IntegrityError, NotFoundError
 from oxyde.models import registered_tables
+from oxyde.queries.q import Q
 
 from oxyde_admin.exceptions import (
     ConflictError,
@@ -92,8 +94,6 @@ async def list_records(
         query = query.filter(**filters)
 
     if search and search_fields:
-        from oxyde.queries.q import Q
-
         conditions = [Q(**{f"{f}__icontains": search}) for f in search_fields]
         q = conditions[0]
         for c in conditions[1:]:
@@ -247,8 +247,6 @@ async def get_options(
     label_field = display_field or _guess_display_field(model)
     query = model.objects
     if search:
-        from oxyde.queries.q import Q
-
         query = query.filter(Q(**{f"{label_field}__icontains": search}))
     items = await query.limit(limit).all()
     result = [
@@ -287,8 +285,6 @@ async def resolve_fk_labels(
 
     Returns ``{column_name: {fk_id: label, ...}, ...}``.
     """
-    import asyncio
-
     fk_fields = {}
     for name, col in model._db_meta.field_metadata.items():
         if col.foreign_key:
@@ -322,6 +318,43 @@ async def resolve_fk_labels(
         *(_resolve(col_name, col_meta) for col_name, col_meta in fk_fields.items())
     )
     return result
+
+
+@functools.lru_cache(maxsize=None)
+def _pk_list_adapter(pk_type: type) -> TypeAdapter:
+    return TypeAdapter(list[pk_type])
+
+
+def _validate_m2m_ids(model: type[Model], field_name: str, value: Any) -> list:
+    """Validate an M2M payload value: a list of target primary keys.
+
+    The model's own annotation is ``list[Target]``, so it cannot validate the
+    shape the API actually accepts. Validating against the target's PK type
+    instead keeps a bad value a 422 like any other field, rather than a
+    silently emptied relation.
+    """
+    relation = get_relation_targets(model).get(field_name)
+    pk_type: Any = Any
+    if relation is not None:
+        pk_type = _get_pk_field(relation.model)[1]
+    return _pk_list_adapter(pk_type).validate_python(value)
+
+
+def split_m2m_payload(
+    model: type[Model], data: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, list] | None]:
+    """Split an incoming payload into column values and M2M relation values."""
+    m2m_names = set(_get_m2m_fields(model))
+    if not m2m_names:
+        return data, None
+    clean: dict[str, Any] = {}
+    m2m_data: dict[str, list] = {}
+    for key, value in data.items():
+        if key in m2m_names:
+            m2m_data[key] = _validate_m2m_ids(model, key, value)
+        else:
+            clean[key] = value
+    return clean, m2m_data or None
 
 
 def _validate_field_values(
